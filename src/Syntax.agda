@@ -11,18 +11,18 @@ open import Data.AVL.Sets as S
 
 --------------------------------------------------------------------------------
 
-data Var : Set where
-  V  : String -> Var
-
 data LocVar : Set where
   eLoc : LocVar
   Loc  : String -> LocVar
 
-data DataCon : Set where
-  DataC : String -> DataCon
+Var : Set
+Var = String
 
-data TyCon : Set where
-  TyC : String -> TyCon
+DataCon : Set
+DataCon = String
+
+TyCon : Set
+TyCon = String
 
 data Prim : Set where
   AddP : Prim
@@ -72,6 +72,7 @@ data Exp where
   IfE : Exp -> Exp -> Exp -> Exp
   MkProdE : List Exp -> Exp
   ProjE : ℕ -> Exp -> Exp
+  --
   CaseE : Exp -> List ((DataCon × List (Var × LocVar)) × Exp) -> Exp
   DataConE : LocVar -> DataCon -> List Exp -> Exp
   -- Location calculus
@@ -101,47 +102,71 @@ record DDef : Set where
     tyName   : Var
     dataCons : List (DataCon × List Ty)
 
+DDefs : Set
+DDefs = List DDef
+
+FunDefs : Set
+FunDefs = List FunDef
+
 record Prog : Set where
   field
-    fundefs : List (Var × FunDef)
-    ddefs   : List (Var × DDef)
+    fundefs : FunDefs
+    ddefs   : DDefs
     mainExp : Maybe Exp
+
+--------------------------------------------------------------------------------
+-- Common
+
+VarEnv : Set
+VarEnv = List (Var × Ty)
+
+FunEnv : Set
+FunEnv = List (Var × ArrowTy)
+
+record Env2 : Set where
+  field
+    vEnv : VarEnv
+    fEnv : FunEnv
+
+-- lookupVar : Env2 -> Var -> Ty
+-- lookupVar = {!!}
+
 
 --------------------------------------------------------------------------------
 
 ddtree : DDef
-ddtree = record { tyName = V "Tree"
-                ; dataCons =   (DataC "Leaf" , [ IntTy ] ) ∷
-                             [ (DataC "Node" ,   PackedTy (TyC "Tree") (Loc "l") ∷
-                                               [ PackedTy (TyC "Tree") (Loc "r") ] )
+ddtree = record { tyName = "Tree"
+                ; dataCons =   ("Leaf" , [ IntTy ] ) ∷
+                             [ ("Node" ,   PackedTy "Tree" (Loc "l") ∷
+                                               [ PackedTy "Tree" (Loc "r") ] )
                              ]
                 }
 
 buildTree : FunDef
-buildTree = record { funName = V "buildTree"
-                   ; funArg  = V "n"
+buildTree = record { funName = "buildTree"
+                   ; funArg  = "n"
                    ; funTy = record { locVars = [ record { loc = Loc "out2"
                                                          ; reg = Reg "r1"
                                                          ; mod = Output } ]
                                     ; inT  = IntTy
-                                    ; outT = PackedTy (TyC "Tree") (Loc "out2") }
+                                    ; outT = PackedTy "Tree" (Loc "out2") }
                    ; funBody = buildTreeBod
                    }
   where
     buildTreeBod : Exp
-    buildTreeBod = LetE ( V "b3" ,  [] , BoolTy
-                        , PrimAppE EqIntP (VarE (V "n") ∷ [ LitE 0 ]))
-                   (IfE (VarE (V "b3"))
-                     (DataConE (Loc "out2") (DataC "Leaf") [ LitE 1 ])
-                     ( LetE ( (V "n4") , [] , IntTy
-                            , (PrimAppE SubP ( VarE (V "n") ∷ [ LitE 1 ])))
+    buildTreeBod = LetE ( "b3" ,  [] , BoolTy
+                        , PrimAppE EqIntP (VarE "n" ∷ [ LitE 0 ]))
+                   (IfE (VarE "b3")
+                     (DataConE (Loc "out2") "Leaf" [ LitE 1 ])
+                     ( LetE ( ("n4") , [] , IntTy
+                            , (PrimAppE SubP ( VarE "n" ∷ [ LitE 1 ])))
                        (LetLocE (Loc "loc_x5") (AfterConstantLE 1 (Loc "out2"))
-                       (LetE ( V "x5" , [] , PackedTy (TyC "Tree") (Loc "loc_x5")
-                             , AppE (V "buildTree") [ (Loc "loc_x5") ] (VarE (V "n4")))
-                       (LetLocE (Loc "loc_y6") (AfterVariableLE (V "x5") (Loc "loc_x5"))
-                       (LetE (V "y8" , [] , PackedTy (TyC "Tree") (Loc "loc_y6")
-                             , AppE (V "buildTree") [ (Loc "loc_y6") ] (VarE (V "n4")))
-                       (LetE (V "z9" , [] , PackedTy (TyC "Tree") (Loc "out2")
-                             , DataConE (Loc "out2") (DataC "Node")
-                                        (VarE (V "x5") ∷ [ VarE (V "y8") ]))
-                       (VarE (V "z9")))))))))
+                       (LetE ( "x5" , [] , PackedTy "Tree" (Loc "loc_x5")
+                             , AppE "buildTree" [ (Loc "loc_x5") ] (VarE ("n4")))
+                       (LetLocE (Loc "loc_y6") (AfterVariableLE "x5" (Loc "loc_x5"))
+                       (LetE ("y8" , [] , PackedTy "Tree" (Loc "loc_y6")
+                             , AppE "buildTree" [ (Loc "loc_y6") ] (VarE "n4"))
+                       (LetE ("z9" , [] , PackedTy "Tree" (Loc "out2")
+                             , DataConE (Loc "out2") "Node"
+                                        (VarE "x5" ∷ [ VarE ("y8") ]))
+                       (VarE "z9"))))))))
