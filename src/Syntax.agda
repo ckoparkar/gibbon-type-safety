@@ -1,7 +1,7 @@
 module Syntax where
 
 open import Data.Bool
-open import Data.String
+open import Data.String as Str
 open import Data.Nat
 open import Data.Product
 open import Data.Maybe
@@ -39,6 +39,7 @@ data Ty : Set where
   ProdTy   : List Ty -> Ty
   PackedTy : TyCon -> LocVar -> Ty
   CursorTy : Ty
+  Error  : String -> Ty
 
 --------------------------------------------------------------------------------
 
@@ -128,9 +129,22 @@ record Env2 : Set where
     vEnv : VarEnv
     fEnv : FunEnv
 
--- lookupVar : Env2 -> Var -> Ty
--- lookupVar = {!!}
+-- | If the element member of the list
+elemVar : ∀ {a : Set} -> Var -> List (Var × a) -> Bool
+elemVar x [] = false
+elemVar x ((y , _) ∷ ls) = x == y
 
+-- |
+unsafeLookupVar : Var -> VarEnv -> Ty
+unsafeLookupVar x [] = Error (x Str.++ " not found")
+unsafeLookupVar x ((y , ty) ∷ rst) = if x == y
+                                     then ty
+                                     else unsafeLookupVar x rst
+
+lookupVar : Var -> Env2 -> Maybe Ty
+lookupVar v env2 with elemVar v (Env2.vEnv env2)
+... | true  = just (unsafeLookupVar v (Env2.vEnv env2))
+... | false = nothing
 
 --------------------------------------------------------------------------------
 
@@ -138,7 +152,7 @@ ddtree : DDef
 ddtree = record { tyName = "Tree"
                 ; dataCons =   ("Leaf" , [ IntTy ] ) ∷
                              [ ("Node" ,   PackedTy "Tree" (Loc "l") ∷
-                                               [ PackedTy "Tree" (Loc "r") ] )
+                                         [ PackedTy "Tree" (Loc "r") ] )
                              ]
                 }
 
