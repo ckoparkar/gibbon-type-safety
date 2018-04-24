@@ -43,7 +43,7 @@ data Modality : Set where
   Input  : Modality
   Output : Modality
 
-data LRM : Set where  
+data LRM : Set where
   lrm : LocVar -> Region -> Modality -> LRM
 
 lrmLoc : LRM -> LocVar
@@ -64,7 +64,7 @@ data Exp where
   LitE : ℕ -> Exp
   AppE : Var -> List LocVar -> Exp -> Exp
   PrimAppE : Prim -> List Exp -> Exp
-  LetE : (Var × List LocVar × Ty × Exp) -> Exp -> Exp
+  LetE : (Var × Ty × Exp) -> Exp -> Exp
   IfE : Exp -> Exp -> Exp -> Exp
   MkProdE : List Exp -> Exp
   ProjE : ℕ -> Exp -> Exp
@@ -75,6 +75,9 @@ data Exp where
   LetRegionE : Region -> Exp -> Exp
   LetLocE : LocVar -> LocExp -> Exp -> Exp
   RetE : (List LocVar) -> Exp -> Exp
+  -- Hard coding some constructors to make some proofs easy
+  LeafE : LocVar -> Exp -> Exp
+  NodeE : LocVar -> Exp -> Exp -> Exp
 
 CaseBranch = DataCon × (List (Var × LocVar) × Exp)
 
@@ -83,6 +86,8 @@ data Ty where
   BoolTy   : Ty
   ProdTy   : List Ty -> Ty
   PackedTy : TyCon -> LocVar -> Ty
+  -- Used in the type family version
+  PackedAt : TyCon -> LocVar -> Region -> Ty
   CursorTy : Ty
   ErrorTy  : String -> Exp -> Ty
 

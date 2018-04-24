@@ -3,6 +3,7 @@ module Typecheck where
 open import Data.Bool
 open import Data.String as Str
 open import Data.Nat
+import Agda.Builtin.Nat as N
 open import Data.Product
 open import Data.Sum
 open import Data.Maybe as M
@@ -101,6 +102,28 @@ setAliased loc ((loc2 , (m , b)) ∷ tstate) =
   then (loc2 , (m , true)) ∷ tstate
   else (loc2 , (m , b)) ∷ (setAliased loc tstate)
 
+-- | Check that l2 is after l1
+ensureAfterConstant : ℕ -> LocVar -> LocVar -> ConstraintSet -> Bool
+ensureAfterConstant n l1 l2 [] = false
+ensureAfterConstant n l1 l2 (StartOfC _ _ ∷ cs) = ensureAfterConstant n l1 l2 cs
+ensureAfterConstant n l1 l2 (AfterConstantC n' l1' l2' ∷ cs) =
+  if (n N.== n') ∧ (l1 == l1') ∧ (l2 == l2')
+  then true
+  else ensureAfterConstant n l1 l2 cs
+ensureAfterConstant n l1 l2 (AfterVariableC _ _ _ ∷ cs) = ensureAfterConstant n l1 l2 cs
+ensureAfterConstant n l1 l2 (InRegionC _ _ ∷ cs) = ensureAfterConstant n l1 l2 cs
+
+-- | Check that l2 is after l1
+ensureAfterPacked : LocVar -> LocVar -> ConstraintSet -> Bool
+ensureAfterPacked l1 l2 [] = false
+ensureAfterPacked l1 l2 (StartOfC _ _ ∷ cs) = ensureAfterPacked l1 l2 cs
+ensureAfterPacked l1 l2 (AfterConstantC _ _ _ ∷ cs) = ensureAfterPacked l1 l2 cs
+ensureAfterPacked l1 l2 (AfterVariableC _ l1' l2' ∷ cs) =
+  if (l1 == l1') ∧ (l2 == l2')
+  then true
+  else ensureAfterPacked l1 l2 cs
+ensureAfterPacked l1 l2 (InRegionC _ _ ∷ cs) = ensureAfterPacked l1 l2 cs
+
 --------------------------------------------------------------------------------
 
 tcExp : DDefs -> FunDefs -> Env2 -> ConstraintSet -> RegionSet -> LocationTypeState ->
@@ -179,7 +202,7 @@ tcExp ddfs fndefs env2 constrs regset tstatein (PrimAppE pr args) = tcPrimAppE p
       then BoolTy , tstatein
       else ErrorTy ("MkFalse doesn't take any arguments.") (PrimAppE pr args) , tstatein
 
-tcExp ddfs fndefs env2 constrs regset tstatein (LetE (v , ls , ty , rhs) bod) =
+tcExp ddfs fndefs env2 constrs regset tstatein (LetE (v , ty , rhs) bod) =
   let (ty1 , tstate1) = tcExp ddfs fndefs env2 constrs regset tstatein rhs
   in if eqTyNoLoc ty1 ty
      then (let env2' = extendVEnv v ty env2
@@ -257,10 +280,33 @@ tcExp ddfs fndefs env2 constrs regset tstatein (LetLocE loc (AfterVariableLE v l
 tcExp ddfs fndefs env2 constrs regset tstatein (RetE locs e) =
   tcExp ddfs fndefs env2 constrs regset tstatein e
 
--- | 
+-- Hacks:
+tcExp ddfs fndefs env2 constrs regset tstatein (LeafE loc n) =
+  let (ty , tstate) = tcExp ddfs fndefs env2 constrs regset tstatein n in
+  if eqTy ty IntTy
+  -- TODO: Check after constant 1
+  then PackedTy "Tree" loc , tstate
+  else ErrorTy "LeafE: Argument not an int" (LeafE loc n) , tstate
+
+tcExp ddfs fndefs env2 constrs regset tstatein (NodeE loc x y) =
+  let (tyx , tstate1) = tcExp ddfs fndefs env2 constrs regset tstatein x in
+  let (tyy , tstate2) = tcExp ddfs fndefs env2 constrs regset tstate1 y in
+  (if (isPackedTy tyx)
+  then (if (isPackedTy tyy)
+        then (let locx = tyLoc tyx in
+              let locy = tyLoc tyy in
+              if (ensureAfterConstant 1 loc locx constrs)
+              then (if (ensureAfterPacked locx locy constrs)
+                    then PackedTy "Tree" loc , tstate2
+                    else (ErrorTy "NodeE: ly = l + lx not found." (NodeE loc x y)) , tstate2)
+              else (ErrorTy "NodeE: lx = l + 1 not found." (NodeE loc x y)) , tstate2)
+        else (ErrorTy "NodeE: not packed" y) , tstate2)
+  else (ErrorTy "NodeE: x not packed" x) , tstate2)
+
+-- |
 tcExps ddfs fndefs env2 constrs regset tstatein [] = [] , tstatein
 tcExps ddfs fndefs env2 constrs regset tstatein (exp ∷ exps) =
-  let (ty , tstate') = tcExp ddfs fndefs env2 constrs regset tstatein exp in  
+  let (ty , tstate') = tcExp ddfs fndefs env2 constrs regset tstatein exp in
   let (tys , tstate'') = tcExps ddfs fndefs env2 constrs regset tstate' exps in
   ty ∷ tys , tstate''
 
@@ -300,7 +346,7 @@ tcCases ddfs fndefs env2 constrs regset tstatein lin reg ((dc , (vs , bod)) ∷ 
     {-# CATCHALL #-}
     genTS _ ts = ts
 
-    
+
     genEnv : ((Var × LocVar) × Ty) -> Env2 -> Env2
     genEnv ((v , l) , PackedTy dc _l') env = extendVEnv v (PackedTy dc l) env
     {-# CATCHALL #-}
@@ -321,7 +367,7 @@ tcFunDef : DDefs -> FunDefs -> FunDef -> Ty
 tcFunDef ddfs fndefs fn =
   let fnty = FunDef.funTy fn in
   let env2 = extendVEnv (FunDef.funArg fn) (ArrowTy.inT fnty) emptyEnv2 in
-  let lvars = ArrowTy.locVars fnty in  
+  let lvars = ArrowTy.locVars fnty in
   let constrs = fnConstrs lvars in
   let regset = fnRegset lvars in
   let tstatein = fnTState lvars in
@@ -346,8 +392,8 @@ tcProg (prog ddfs fndefs (mainexp , ty)) =
   if L.null errors
   then (let (ty1 , _) = tcExp ddfs fndefs emptyEnv2 [] [] [] mainexp in
         if isErrorTy ty ∨ (not (eqTy ty ty1))
-        then inj₁ [ ty ]
-        else inj₂ (prog ddfs fndefs (mainexp , ty))
+        then inj₂ (prog ddfs fndefs (mainexp , ty))
+        else inj₁ [ ty ]
        )
   else inj₁ errors
 
@@ -372,21 +418,20 @@ buildTreeFunDef = record
                    }
   where
     buildTreeBod : Exp
-    buildTreeBod = LetE ( "b3" ,  [] , BoolTy
+    buildTreeBod = LetE ( "b3" , BoolTy
                         , PrimAppE EqIntP (VarE "n" ∷ [ LitE 0 ]))
                    (IfE (VarE "b3")
-                     (DataConE "out2" "Leaf" [ LitE 1 ])
-                     ( LetE ( ("n4") , [] , IntTy
+                     (LeafE "out2" (LitE 1))
+                     ( LetE ( ("n4") , IntTy
                             , (PrimAppE SubP ( VarE "n" ∷ [ LitE 1 ])))
                        (LetLocE "loc_x5" (AfterConstantLE 1 "out2")
-                       (LetE ( "x5" , [] , PackedTy "Tree" "loc_x5"
+                       (LetE ( "x5" , PackedTy "Tree" "loc_x5"
                              , AppE "buildTree" [ "loc_x5" ] (VarE ("n4")))
                        (LetLocE "loc_y6" (AfterVariableLE "x5" "loc_x5")
-                       (LetE ("y8" , [] , PackedTy "Tree" "loc_y6"
+                       (LetE ("y8" , PackedTy "Tree" "loc_y6"
                              , AppE "buildTree" [ "loc_y6" ] (VarE "n4"))
-                       (LetE ("z9" , [] , PackedTy "Tree" "out2"
-                             , DataConE "out2" "Node"
-                        (VarE "x5" ∷ [ VarE ("y8") ]))
+                       (LetE ("z9" , PackedTy "Tree" "out2" ,
+                              NodeE "out2" (VarE "x5") (VarE "y8"))
                        (VarE "z9"))))))))
 
 buildTreeMainExp : Exp
