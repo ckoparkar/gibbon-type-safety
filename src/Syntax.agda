@@ -60,34 +60,33 @@ data LocExp where
   AfterVariableLE : Var -> LocVar -> LocExp
 
 data Exp where
-  VarE : Var -> Exp
+  VarE       : Var -> Exp
+  AppE       : Var -> List LocVar -> Exp -> Exp
+  LetE       : (Var × Ty × Exp) -> Exp -> Exp
+  LetRegionE : Region -> Exp -> Exp
+  LetLocE    : LocVar -> LocExp -> Exp -> Exp
+  LeafE      : LocVar -> Region -> Exp -> Exp
+  NodeE      : LocVar -> Region -> Exp -> Exp -> Exp
+  --
   LitE : ℕ -> Exp
-  AppE : Var -> List LocVar -> Exp -> Exp
   PrimAppE : Prim -> List Exp -> Exp
-  LetE : (Var × Ty × Exp) -> Exp -> Exp
   IfE : Exp -> Exp -> Exp -> Exp
   MkProdE : List Exp -> Exp
   ProjE : ℕ -> Exp -> Exp
-  --
   CaseE : Exp -> List CaseBranch -> Exp
   DataConE : LocVar -> DataCon -> List Exp -> Exp
-  -- Location calculus
-  LetRegionE : Region -> Exp -> Exp
-  LetLocE : LocVar -> LocExp -> Exp -> Exp
   RetE : (List LocVar) -> Exp -> Exp
-  -- Hard coding some constructors to make some proofs easy
-  LeafE : LocVar -> Exp -> Exp
-  NodeE : LocVar -> Exp -> Exp -> Exp
 
 CaseBranch = DataCon × (List (Var × LocVar) × Exp)
 
 data Ty where
   IntTy    : Ty
+  PackedAt : TyCon -> LocVar -> Region -> Ty
+
+  PackedTy : TyCon -> LocVar -> Ty
   BoolTy   : Ty
   ProdTy   : List Ty -> Ty
-  PackedTy : TyCon -> LocVar -> Ty
   -- Used in the type family version
-  PackedAt : TyCon -> LocVar -> Region -> Ty
   CursorTy : Ty
   ErrorTy  : String -> Exp -> Ty
 
@@ -249,3 +248,23 @@ eqTyNoLoc CursorTy CursorTy = true
 eqTyNoLoc (ErrorTy msg1 e1) (ErrorTy msg2 e2) = true
 {-# CATCHALL #-}
 eqTyNoLoc ty1 ty2 = false
+
+
+--------------------------------------------------------------------------------
+-- Slides examples
+
+data Tree : Set where
+  Leaf : ℕ -> Tree
+  Node : Tree -> Tree -> Tree
+
+ex1 : Tree
+ex1 = Node (Leaf 1) (Leaf 2)
+
+----------------------------------------------------
+
+buildtree : ℕ -> Tree
+buildtree zero = Leaf 1
+buildtree (suc n) = Node (buildtree n) (buildtree n)
+
+ex2 : Tree
+ex2 = buildtree 1

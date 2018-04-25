@@ -281,14 +281,14 @@ tcExp ddfs fndefs env2 constrs regset tstatein (RetE locs e) =
   tcExp ddfs fndefs env2 constrs regset tstatein e
 
 -- Hacks:
-tcExp ddfs fndefs env2 constrs regset tstatein (LeafE loc n) =
+tcExp ddfs fndefs env2 constrs regset tstatein (LeafE loc r n) =
   let (ty , tstate) = tcExp ddfs fndefs env2 constrs regset tstatein n in
   if eqTy ty IntTy
   -- TODO: Check after constant 1
   then PackedTy "Tree" loc , tstate
-  else ErrorTy "LeafE: Argument not an int" (LeafE loc n) , tstate
+  else ErrorTy "LeafE: Argument not an int" (LeafE loc r n) , tstate
 
-tcExp ddfs fndefs env2 constrs regset tstatein (NodeE loc x y) =
+tcExp ddfs fndefs env2 constrs regset tstatein (NodeE loc r x y) =
   let (tyx , tstate1) = tcExp ddfs fndefs env2 constrs regset tstatein x in
   let (tyy , tstate2) = tcExp ddfs fndefs env2 constrs regset tstate1 y in
   (if (isPackedTy tyx)
@@ -298,8 +298,8 @@ tcExp ddfs fndefs env2 constrs regset tstatein (NodeE loc x y) =
               if (ensureAfterConstant 1 loc locx constrs)
               then (if (ensureAfterPacked locx locy constrs)
                     then PackedTy "Tree" loc , tstate2
-                    else (ErrorTy "NodeE: ly = l + lx not found." (NodeE loc x y)) , tstate2)
-              else (ErrorTy "NodeE: lx = l + 1 not found." (NodeE loc x y)) , tstate2)
+                    else (ErrorTy "NodeE: ly = l + lx not found." (NodeE loc r x y)) , tstate2)
+              else (ErrorTy "NodeE: lx = l + 1 not found." (NodeE loc r x y)) , tstate2)
         else (ErrorTy "NodeE: not packed" y) , tstate2)
   else (ErrorTy "NodeE: x not packed" x) , tstate2)
 
@@ -421,7 +421,7 @@ buildTreeFunDef = record
     buildTreeBod = LetE ( "b3" , BoolTy
                         , PrimAppE EqIntP (VarE "n" ∷ [ LitE 0 ]))
                    (IfE (VarE "b3")
-                     (LeafE "out2" (LitE 1))
+                     (LeafE "out2" "r1" (LitE 1))
                      ( LetE ( ("n4") , IntTy
                             , (PrimAppE SubP ( VarE "n" ∷ [ LitE 1 ])))
                        (LetLocE "loc_x5" (AfterConstantLE 1 "out2")
@@ -431,7 +431,7 @@ buildTreeFunDef = record
                        (LetE ("y8" , PackedTy "Tree" "loc_y6"
                              , AppE "buildTree" [ "loc_y6" ] (VarE "n4"))
                        (LetE ("z9" , PackedTy "Tree" "out2" ,
-                              NodeE "out2" (VarE "x5") (VarE "y8"))
+                              NodeE "out2" "r1" (VarE "x5") (VarE "y8"))
                        (VarE "z9"))))))))
 
 buildTreeMainExp : Exp
@@ -440,7 +440,7 @@ buildTreeMainExp = LetRegionE "r20"
                    (AppE "buildTree" ["l21"] (LitE 2)))
 
 buildTreeProg : Prog
-buildTreeProg = prog [ ddtree ] [ buildTreeFunDef ] (buildTreeMainExp , PackedTy "Tree" "l21")
+buildTreeProg = prog [ ddtree ] [ buildTreeFunDef ] (buildTreeMainExp , PackedAt "Tree" "l21" "r1")
 
 test1 : (List Ty) ⊎ Prog
 test1 = tcProg buildTreeProg
