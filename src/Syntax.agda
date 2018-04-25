@@ -221,6 +221,9 @@ substTy mp (PackedTy dc l1)  with mlookupLocVar l1 mp
 ... | nothing = PackedTy dc l1
 substTy mp CursorTy = CursorTy
 substTy mp (ErrorTy msg ex) = ErrorTy msg ex
+substTy mp (PackedAt dc l1 reg) with mlookupLocVar l1 mp
+... | just l2 = PackedAt dc l2 reg
+... | nothing = PackedAt dc l1 reg
 
 --------------------------------------------------------------------------------
 -- Eq
