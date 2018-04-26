@@ -88,12 +88,12 @@ data CEnv : Set where
   _,_   : LocationConstraint -> CEnv -> CEnv
 
 data _∈C_ : LocationConstraint -> CEnv -> Set where
-  hereac : ∀ {l0 l1 C} -> (AfterConstantC 1 l0 l1) ∈C C
-  skipac : ∀ {l0 l1 l0' l1' C} ->
+  hereac : ∀ {n l0 l1 C} -> (AfterConstantC n l0 l1) ∈C C
+  skipac : ∀ {l0 l1 l0' l1' n n' C} ->
              {α : False (l0 Str.≟ l0')} ->
              {β : False (l1 Str.≟ l1')} ->
-             (AfterConstantC 1 l0 l1) ∈C C ->
-             (AfterConstantC 1 l0 l1) ∈C ((AfterConstantC 1 l0' l1') , C)
+             (AfterConstantC n l0 l1) ∈C C ->
+             (AfterConstantC n l0 l1) ∈C ((AfterConstantC n' l0' l1') , C)
 
   hereav : ∀ {s l0 l1 C} -> (AfterVariableC s l0 l1) ∈C C
   skipav : ∀ {s1 s2 l0 l1 l0' l1' C} ->
@@ -177,9 +177,9 @@ data _,_,_,_⊢_∷_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) ->
              L1 , R , C , T  ⊢ LeafE l1 r1 arg ∷ (PackedAt "Tree" l1 r1) , L2
 
 
-   NodeT : ∀ {L1 L2 L3 R C T l0 r0 dc1 l1 r1 dc2 l2 r2 x y} ->
+   NodeT : ∀ {L1 L2 L3 R C T l0 r0 dc1 l1 r1 dc2 l2 x y} ->
               L1 , R , C , T ⊢ x ∷ PackedAt dc1 l1 r1 , L2 ->
-              L2 , R , C , T ⊢ y ∷ PackedAt dc2 l2 r2 , L3 ->
+              L2 , R , C , T ⊢ y ∷ PackedAt dc2 l2 r1 , L3 ->
               (AfterConstantC 1 l0 l1) ∈C C ->
               (AfterVariableC {!!} l1 l2) ∈C C ->
               ----------------------------------------------------------------
