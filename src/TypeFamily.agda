@@ -18,17 +18,22 @@ open import Syntax
 open import Typecheck
 
 --------------------------------------------------------------------------------
+-- The type environment
 
 data TEnv : Set where
   etenv : TEnv
   _,_  : (String × Ty) -> TEnv -> TEnv
 
-data _∈T_ : (String × Ty) → TEnv → Set where
+data _∈T_ : (String × Ty) -> TEnv -> Set where
   heret : ∀ {Γ s τ} -> (s , τ) ∈T ((s , τ) , Γ)
   skipt : ∀ {Γ s τ s' τ'} ->
            {α : False (s Str.≟ s')} -> (s , τ) ∈T Γ -> (s , τ) ∈T ((s' , τ') , Γ)
 
 --------------------------------------------------------------------------------
+-- Location type state environment: contains information about whether a location:
+-- (1) has been written to,
+-- (2) has been aliased (some other location depends on this one)
+
 
 data LEnv : Set where
   elenv : LEnv
@@ -69,6 +74,8 @@ data _∉A_ : LocVar -> LEnv -> Set where
 -}
 
 --------------------------------------------------------------------------------
+-- Region Environment (to check if a region is bound)
+
 
 data REnv : Set where
   erenv : REnv
@@ -82,6 +89,7 @@ data _∈R_ : Region -> REnv -> Set where
   herer : ∀ {r R} -> r ∈R R
 
 --------------------------------------------------------------------------------
+-- Constraint environment
 
 data CEnv : Set where
   ecenv : CEnv
@@ -105,7 +113,6 @@ data _∈C_ : LocationConstraint -> CEnv -> Set where
 --------------------------------------------------------------------------------
 
 data _,_,_,_⊢_∷_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) -> (e : Exp) -> (t : Ty) -> (L' : LEnv) -> Set where
-
    LitT       : ∀ {L R C T n} ->
                 ----------------------------------
                 L , R , C , T ⊢ LitE n ∷ IntTy , L
@@ -162,6 +169,8 @@ data _,_,_,_⊢_∷_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) ->
                       ----------------------------------------------------------------
                       L1 , R , C , T  ⊢ LetLocE l1 (AfterConstantLE n l2) bod ∷ t , L3
 
+
+   -- Add a let scalar rule ...
 
    LetPackedT : ∀ {L1 L2 L3 R C T tycon1 l1 r1 x rhs bod tycon2 l2 r2} ->
                   L1 , R , C , T ⊢ rhs ∷ (PackedAt tycon1 l1 r1) , L2 ->
@@ -221,3 +230,40 @@ ex4 = LetRegionE "r" (
 test4 : ∀ {L1 L2 R C T} -> L1 , R , C , T  ⊢ ex4 ∷ PackedAt "Tree" "l1" "r" , L2
 test4 {L1 = L1} {L2 = L2} {R = R} {C = C} {T = T} =
   LetRegionT notherer (LetLocStartT (LetPackedT (LeafT herel LitT) (VarT heret)))
+
+--------------------------------------------------------------------------------
+-- Value environment (used in the reduction relation)
+
+data Val : Set where
+  LitV : ℕ -> Val
+  CurV : Region -> ℕ -> Val
+
+data VEnv : Set where
+  evenv : VEnv
+  _,_  : (String × Val) -> VEnv -> VEnv
+
+data _∈V_ : (String × Val) -> VEnv -> Set where
+  herev : ∀ {Γ s τ} -> (s , τ) ∈V ((s , τ) , Γ)
+  skipv : ∀ {Γ s τ s' τ'} ->
+           {α : False (s Str.≟ s')} -> (s , τ) ∈V Γ -> (s , τ) ∈V ((s' , τ') , Γ)
+
+--------------------------------------------------------------------------------
+-- Reduction relation
+
+Closure : Set
+Closure = LEnv × REnv × CEnv × TEnv × VEnv × Exp
+
+data State : Set where
+  Enter  : Closure -> State
+  Return : Val -> State
+
+data _->r_ : State -> State -> Set where
+  LitR : ∀ {le re ce te ve n} ->
+           Enter (le , re , ce , te , ve , (LitE n)) ->r
+           Return (LitV n)
+
+
+  VarR : ∀ {le re ce te ve x v} ->
+           ((x , v) ∈V ve) ->
+           Enter (le , re , ce , te , ve , (VarE x)) ->r
+           Return v
