@@ -6,7 +6,6 @@ open import Data.Nat
 open import Data.Product
 open import Data.Sum
 open import Data.Maybe as M
-open import Data.Fin
 open import Relation.Binary.PropositionalEquality hiding ([_])
 open import Data.List as L
 open import Data.AVL.Sets as S
@@ -234,9 +233,20 @@ test4 {L1 = L1} {L2 = L2} {R = R} {C = C} {T = T} =
 --------------------------------------------------------------------------------
 -- Value environment (used in the reduction relation)
 
+data StoreVal : Set where
+  N : StoreVal
+  L : StoreVal
+  I : ℕ -> StoreVal
+
+Store : Set
+Store = List (ℕ × StoreVal)
+
+
 data Val : Set where
   LitV : ℕ -> Val
-  CurV : Region -> ℕ -> Val
+  -- Offset into some region
+  CurV : Store -> ℕ -> Val
+  StV  : Store -> Val
 
 data VEnv : Set where
   evenv : VEnv
@@ -251,19 +261,53 @@ data _∈V_ : (String × Val) -> VEnv -> Set where
 -- Reduction relation
 
 Closure : Set
-Closure = LEnv × REnv × CEnv × TEnv × VEnv × Exp
-
-data State : Set where
-  Enter  : Closure -> State
-  Return : Val -> State
-
-data _->r_ : State -> State -> Set where
-  LitR : ∀ {le re ce te ve n} ->
-           Enter (le , re , ce , te , ve , (LitE n)) ->r
-           Return (LitV n)
+Closure = TEnv × VEnv × Exp
 
 
-  VarR : ∀ {le re ce te ve x v} ->
-           ((x , v) ∈V ve) ->
-           Enter (le , re , ce , te , ve , (VarE x)) ->r
-           Return v
+data Eval : Closure -> Val -> Set where
+  LitR : ∀ {te ve n} ->
+           Eval (te , ve , (LitE n)) (LitV n)
+
+  VarR : ∀ {te ve x v} ->
+           (x , v) ∈V ve -> Eval (te , ve , (VarE x)) v
+
+
+  LetRegionR : ∀ {te ve r bod v} ->
+                 Eval (te , ((r , (StV [])) , ve) , bod) v ->
+                 Eval (te , ve , (LetRegionE r bod)) v
+
+
+  LetLocStartR : ∀ {te ve l r bod v st} ->
+                 (r , StV st) ∈V ve ->
+                 Eval (te , ((l , (CurV st 0)) , ve) , bod) v ->
+                 Eval (te , ve , (LetLocE l (StartOfLE r) bod)) v
+
+
+  LetLocAfterCR : ∀ {te ve l2 offset l1 n1 r1 bod v} ->
+                  (l1 , (CurV r1 n1)) ∈V ve ->
+                  Eval (te , ((l2 , CurV r1 (n1 + offset)) , ve) , bod) v ->
+                  Eval (te , ve , (LetLocE l2 (AfterConstantLE offset l1) bod)) v
+
+  LetR : ∀ {te ve x ty rhs vrhs bod v} ->
+           Eval (te , ve , rhs) vrhs ->
+           Eval (te , ((x , vrhs) , ve) , bod) v ->
+           Eval (te , ve , LetE (x , ty , rhs) bod) v
+
+
+  LeafR : ∀ {st te ve l r n o nv} ->
+            (r , StV st) ∈V ve ->
+            (l , CurV st o) ∈V ve ->
+            Eval (te , ve , n) (LitV nv) ->
+            Eval (te , ve , (LeafE l r n))
+                 (StV (st L.++ (o , L) ∷ L.[ suc o , I nv ]))
+
+
+rtest5 : Eval (etenv , evenv , LitE 42) (LitV 42)
+rtest5 = LitR
+
+
+rtest4 : Eval (etenv , evenv , ex4) (StV ((0 , L) ∷ L.[ (1 , I 1) ]))
+rtest4 = LetRegionR (
+         LetLocStartR herev (
+         LetR (LeafR (skipv herev) herev LitR) (
+         VarR herev)))
