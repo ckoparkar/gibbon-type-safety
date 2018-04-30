@@ -268,6 +268,7 @@ data Eval : Closure -> Val -> Set where
   LitR : ∀ {te ve n} ->
            Eval (te , ve , (LitE n)) (LitV n)
 
+
   VarR : ∀ {te ve x v} ->
            (x , v) ∈V ve -> Eval (te , ve , (VarE x)) v
 
@@ -284,9 +285,14 @@ data Eval : Closure -> Val -> Set where
 
 
   LetLocAfterCR : ∀ {te ve l2 offset l1 n1 r1 bod v} ->
-                  (l1 , (CurV r1 n1)) ∈V ve ->
-                  Eval (te , ((l2 , CurV r1 (n1 + offset)) , ve) , bod) v ->
-                  Eval (te , ve , (LetLocE l2 (AfterConstantLE offset l1) bod)) v
+                    (l1 , (CurV r1 n1)) ∈V ve ->
+                    Eval (te , ((l2 , CurV r1 (n1 + offset)) , ve) , bod) v ->
+                    Eval (te , ve , (LetLocE l2 (AfterConstantLE offset l1) bod)) v
+
+  LetLocAfterVR : ∀ {te ve l2 l1 n1 r1 bod v x} ->
+                    (l1 , (CurV r1 n1)) ∈V ve ->
+                    Eval (te , ((l2 , CurV r1 (n1 + 2)) , ve) , bod) v ->
+                    Eval (te , ve , (LetLocE l2 (AfterVariableLE x l1) bod)) v
 
   LetR : ∀ {te ve x ty rhs vrhs bod v} ->
            Eval (te , ve , rhs) vrhs ->
@@ -299,15 +305,59 @@ data Eval : Closure -> Val -> Set where
             (l , CurV st o) ∈V ve ->
             Eval (te , ve , n) (LitV nv) ->
             Eval (te , ve , (LeafE l r n))
-                 (StV (st L.++ (o , L) ∷ L.[ suc o , I nv ]))
+                 (StV (st L.++ (o , L) ∷ L.[ (suc o , I nv) ]))
+
+  NodeR : ∀ {te ve l r e1 e2 stx sty st o} ->
+            (r , StV st) ∈V ve ->
+            (l , CurV st o) ∈V ve ->
+            Eval (te , ve , e1) (StV stx) ->
+            Eval (te , ve , e2) (StV sty) ->
+            Eval (te , ve , NodeE l r e1 e2)
+                 (StV (st L.++ L.[ (o , N) ] L.++ stx L.++ sty))
 
 
 rtest5 : Eval (etenv , evenv , LitE 42) (LitV 42)
 rtest5 = LitR
 
 
-rtest4 : Eval (etenv , evenv , ex4) (StV ((0 , L) ∷ L.[ (1 , I 1) ]))
+-- ex4 : Exp
+-- ex4 = LetRegionE "r" (
+--       LetLocE "l1" (StartOfLE "r") (
+--       LetE ("x" , PackedAt "Tree" "l1" "r" , LeafE "l1" "r" (LitE 1)) (
+--       VarE "x"
+--       )))
+
+
+rtest4 : Eval (etenv , evenv , ex4) (StV ((0 , L) ∷ (1 , I 1) ∷ []))
 rtest4 = LetRegionR (
          LetLocStartR herev (
          LetR (LeafR (skipv herev) herev LitR) (
          VarR herev)))
+
+-- ex3 : Exp
+-- ex3 = LetRegionE "r" (
+--       LetLocE "l0" (StartOfLE "r") (
+--       LetLocE "l1" (AfterConstantLE 1 "l0") (
+--       LetE ("x" , PackedAt "Tree" "l1" "r" , LeafE "l1" "r" (LitE 1)) (
+--       LetLocE "l2" (AfterVariableLE "x" "l1") (
+--       LetE ("y" , PackedAt "Tree" "l2" "r" , LeafE "l2" "r" (LitE 2)) (
+--       LetE ("z" , PackedAt "Tree" "l0" "r" , NodeE "l0" "r" (VarE "x") (VarE "y")) (
+--       VarE "z"
+--       )))))))
+
+
+redEx3 : Val
+redEx3 = StV ((0 , N) ∷  (1 , L) ∷ (2 , I 1) ∷ (3 , L) ∷ (4 , I 2) ∷ [])
+
+rtest3 : Eval (etenv , evenv , ex3) redEx3
+rtest3 = LetRegionR (
+         LetLocStartR herev (
+         LetLocAfterCR herev (
+         LetR (
+         LeafR (skipv (skipv herev)) herev LitR) (
+         LetLocAfterVR (skipv herev) (
+         LetR (LeafR (skipv (skipv (skipv (skipv herev)))) herev LitR) (
+         LetR (NodeR (skipv (skipv (skipv (skipv (skipv herev))))) (skipv (skipv (skipv (skipv herev)))) (
+         VarR (skipv (skipv herev))) (
+         VarR herev)) (
+         VarR herev)))))))
