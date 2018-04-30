@@ -194,6 +194,7 @@ data _,_,_,_⊢_∷_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) ->
               L1 , R , C , T  ⊢ NodeE l0 r0 x y ∷ (PackedAt "Tree" l0 r0) , L3
 
 
+-- Ex3: (Node (Leaf 1) (Leaf 2))
 ex3 : Exp
 ex3 = LetRegionE "r" (
       LetLocE "l0" (StartOfLE "r") (
@@ -219,6 +220,7 @@ test3 = LetRegionT notherer (
         VarT heret))))
         )))
 
+-- Ex3: (Leaf 1)
 ex4 : Exp
 ex4 = LetRegionE "r" (
       LetLocE "l1" (StartOfLE "r") (
@@ -289,6 +291,7 @@ data Eval : Closure -> Val -> Set where
                     Eval (te , ((l2 , CurV r1 (n1 + offset)) , ve) , bod) v ->
                     Eval (te , ve , (LetLocE l2 (AfterConstantLE offset l1) bod)) v
 
+  -- The 2 needs to be replaced with the "size" of the element at l1
   LetLocAfterVR : ∀ {te ve l2 l1 n1 r1 bod v x} ->
                     (l1 , (CurV r1 n1)) ∈V ve ->
                     Eval (te , ((l2 , CurV r1 (n1 + 2)) , ve) , bod) v ->
@@ -320,32 +323,14 @@ rtest5 : Eval (etenv , evenv , LitE 42) (LitV 42)
 rtest5 = LitR
 
 
--- ex4 : Exp
--- ex4 = LetRegionE "r" (
---       LetLocE "l1" (StartOfLE "r") (
---       LetE ("x" , PackedAt "Tree" "l1" "r" , LeafE "l1" "r" (LitE 1)) (
---       VarE "x"
---       )))
-
-
+-- Ex4: (Leaf 1)
 rtest4 : Eval (etenv , evenv , ex4) (StV ((0 , L) ∷ (1 , I 1) ∷ []))
 rtest4 = LetRegionR (
          LetLocStartR herev (
          LetR (LeafR (skipv herev) herev LitR) (
          VarR herev)))
 
--- ex3 : Exp
--- ex3 = LetRegionE "r" (
---       LetLocE "l0" (StartOfLE "r") (
---       LetLocE "l1" (AfterConstantLE 1 "l0") (
---       LetE ("x" , PackedAt "Tree" "l1" "r" , LeafE "l1" "r" (LitE 1)) (
---       LetLocE "l2" (AfterVariableLE "x" "l1") (
---       LetE ("y" , PackedAt "Tree" "l2" "r" , LeafE "l2" "r" (LitE 2)) (
---       LetE ("z" , PackedAt "Tree" "l0" "r" , NodeE "l0" "r" (VarE "x") (VarE "y")) (
---       VarE "z"
---       )))))))
-
-
+-- Ex3: (Node (Leaf 1) (Leaf 2))
 redEx3 : Val
 redEx3 = StV ((0 , N) ∷  (1 , L) ∷ (2 , I 1) ∷ (3 , L) ∷ (4 , I 2) ∷ [])
 
@@ -361,3 +346,7 @@ rtest3 = LetRegionR (
          VarR (skipv (skipv herev))) (
          VarR herev)) (
          VarR herev)))))))
+
+
+--------------------------------------------------------------------------------
+-- Type safety
