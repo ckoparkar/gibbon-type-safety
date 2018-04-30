@@ -86,7 +86,6 @@ data Ty where
   PackedTy : TyCon -> LocVar -> Ty
   BoolTy   : Ty
   ProdTy   : List Ty -> Ty
-  -- Used in the type family version
   CursorTy : Ty
   ErrorTy  : String -> Exp -> Ty
 

@@ -11,7 +11,7 @@ open import Data.List as L
 open import Data.AVL.Sets as S
 open import Relation.Nullary.Decidable
 open import Relation.Binary.PropositionalEquality
-
+open import Data.Empty
 
 open import Syntax
 open import Typecheck
@@ -127,7 +127,7 @@ data _,_,_,_⊢_∷_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) ->
 
    LetRegionT : ∀ {L L2 R C T tycon loc r1 r2 bod} ->
                   r1 ∉R R ->
-                  L , (r1 , R) , C , T  ⊢ bod ∷ (PackedAt tycon loc r2) , L2 ->
+                  L , (r1 , R) , C , ((r1 , CursorTy) , T)  ⊢ bod ∷ (PackedAt tycon loc r2) , L2 ->
                   -----------------------------------------------------------------
                   L , R , C , T  ⊢ LetRegionE r1 bod ∷ (PackedAt tycon loc r2) , L2
 
@@ -136,7 +136,7 @@ data _,_,_,_⊢_∷_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) ->
                     -- -- ∃ some loc with before set to true
                     -- -- l1 not in C
                     ((l1 , (false , false , false)) , L1) , R ,
-                    ((StartOfC l1 r1) , C) , T ⊢ bod ∷ t , L3 ->
+                    ((StartOfC l1 r1) , C) , ((l1 , CursorTy) , T) ⊢ bod ∷ t , L3 ->
                     -- (l1 , (true , (b , a))) ∈W L3 ->
                     -- L4 = L3 - l1
                     -------------------------------------------------------
@@ -151,7 +151,7 @@ data _,_,_,_⊢_∷_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) ->
                      -- l1 not in C
                      ((l1 , (false , (true , false))) , L1)
                      , R ,
-                     ((AfterVariableC x l2 l1) , C) , T ⊢ bod ∷ t , L3 ->
+                     ((AfterVariableC x l2 l1) , C) , ((l1 , CursorTy) , T) ⊢ bod ∷ t , L3 ->
                      -- l1 ∈W L3 ->
                      -- L4 = L3 - l1
                      ----------------------------------------------------------------
@@ -162,7 +162,7 @@ data _,_,_,_⊢_∷_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) ->
                       -- l1 not in C
                       -- l2 ∉A L1 ->
                       ((l1 , (false , (true , false))) , L1) , R ,
-                      ((AfterConstantC n l2 l1) , C) , T ⊢ bod ∷ t , L3 ->
+                      ((AfterConstantC n l2 l1) , C) , ((l1 , CursorTy) , T) ⊢ bod ∷ t , L3 ->
                       -- l1 ∈W L3 ->
                       -- L4 = L3 - l1
                       ----------------------------------------------------------------
@@ -216,7 +216,7 @@ test3 = LetRegionT notherer (
         LetPackedT (
         LeafT herel LitT) (
         LetPackedT (
-        NodeT (VarT (skipt heret)) (VarT heret) hereac hereav) (
+        NodeT (VarT (skipt (skipt heret))) (VarT heret) hereac hereav) (
         VarT heret))))
         )))
 
@@ -263,68 +263,69 @@ data _∈V_ : (String × Val) -> VEnv -> Set where
 -- Reduction relation
 
 Closure : Set
-Closure = TEnv × VEnv × Exp
+Closure = VEnv × Exp
 
 
 data Eval : Closure -> Val -> Set where
-  LitR : ∀ {te ve n} ->
-           Eval (te , ve , (LitE n)) (LitV n)
+  LitR : ∀ {ve n} ->
+           Eval (ve , (LitE n)) (LitV n)
 
 
-  VarR : ∀ {te ve x v} ->
-           (x , v) ∈V ve -> Eval (te , ve , (VarE x)) v
+  VarR : ∀ {ve x v} ->
+           (x , v) ∈V ve -> Eval (ve , (VarE x)) v
 
 
-  LetRegionR : ∀ {te ve r bod v} ->
-                 Eval (te , ((r , (StV [])) , ve) , bod) v ->
-                 Eval (te , ve , (LetRegionE r bod)) v
+  LetRegionR : ∀ {ve r bod v} ->
+                 Eval (((r , (StV [])) , ve) , bod) v ->
+                 Eval (ve , (LetRegionE r bod)) v
 
 
-  LetLocStartR : ∀ {te ve l r bod v st} ->
+  LetLocStartR : ∀ {ve l r bod v st} ->
                  (r , StV st) ∈V ve ->
-                 Eval (te , ((l , (CurV st 0)) , ve) , bod) v ->
-                 Eval (te , ve , (LetLocE l (StartOfLE r) bod)) v
+                 Eval (((l , (CurV st 0)) , ve) , bod) v ->
+                 Eval (ve , (LetLocE l (StartOfLE r) bod)) v
 
 
-  LetLocAfterCR : ∀ {te ve l2 offset l1 n1 r1 bod v} ->
+  LetLocAfterCR : ∀ {ve l2 offset l1 n1 r1 bod v} ->
                     (l1 , (CurV r1 n1)) ∈V ve ->
-                    Eval (te , ((l2 , CurV r1 (n1 + offset)) , ve) , bod) v ->
-                    Eval (te , ve , (LetLocE l2 (AfterConstantLE offset l1) bod)) v
+                    Eval (((l2 , CurV r1 (n1 + offset)) , ve) , bod) v ->
+                    Eval (ve , (LetLocE l2 (AfterConstantLE offset l1) bod)) v
 
   -- The 2 needs to be replaced with the "size" of the element at l1
-  LetLocAfterVR : ∀ {te ve l2 l1 n1 r1 bod v x} ->
+  LetLocAfterVR : ∀ {ve l2 l1 n1 r1 bod v x} ->
                     (l1 , (CurV r1 n1)) ∈V ve ->
-                    Eval (te , ((l2 , CurV r1 (n1 + 2)) , ve) , bod) v ->
-                    Eval (te , ve , (LetLocE l2 (AfterVariableLE x l1) bod)) v
+                    Eval (((l2 , CurV r1 (n1 + 2)) , ve) , bod) v ->
+                    Eval (ve , (LetLocE l2 (AfterVariableLE x l1) bod)) v
 
-  LetR : ∀ {te ve x ty rhs vrhs bod v} ->
-           Eval (te , ve , rhs) vrhs ->
-           Eval (te , ((x , vrhs) , ve) , bod) v ->
-           Eval (te , ve , LetE (x , ty , rhs) bod) v
+  LetR : ∀ {ve x ty rhs vrhs bod v} ->
+           Eval (ve , rhs) vrhs ->
+           Eval (((x , vrhs) , ve) , bod) v ->
+           Eval (ve , LetE (x , ty , rhs) bod) v
 
 
-  LeafR : ∀ {st te ve l r n o nv} ->
+  LeafR : ∀ {st ve l r n o nv} ->
             (r , StV st) ∈V ve ->
             (l , CurV st o) ∈V ve ->
-            Eval (te , ve , n) (LitV nv) ->
-            Eval (te , ve , (LeafE l r n))
+            Eval (ve , n) (LitV nv) ->
+            Eval (ve , (LeafE l r n))
                  (StV (st L.++ (o , L) ∷ L.[ (suc o , I nv) ]))
 
-  NodeR : ∀ {te ve l r e1 e2 stx sty st o} ->
+
+  NodeR : ∀ {ve l r e1 e2 stx sty st o} ->
             (r , StV st) ∈V ve ->
             (l , CurV st o) ∈V ve ->
-            Eval (te , ve , e1) (StV stx) ->
-            Eval (te , ve , e2) (StV sty) ->
-            Eval (te , ve , NodeE l r e1 e2)
+            Eval (ve , e1) (StV stx) ->
+            Eval (ve , e2) (StV sty) ->
+            Eval (ve , NodeE l r e1 e2)
                  (StV (st L.++ L.[ (o , N) ] L.++ stx L.++ sty))
 
 
-rtest5 : Eval (etenv , evenv , LitE 42) (LitV 42)
+rtest5 : Eval (evenv , LitE 42) (LitV 42)
 rtest5 = LitR
 
 
 -- Ex4: (Leaf 1)
-rtest4 : Eval (etenv , evenv , ex4) (StV ((0 , L) ∷ (1 , I 1) ∷ []))
+rtest4 : Eval (evenv , ex4) (StV ((0 , L) ∷ (1 , I 1) ∷ []))
 rtest4 = LetRegionR (
          LetLocStartR herev (
          LetR (LeafR (skipv herev) herev LitR) (
@@ -334,19 +335,76 @@ rtest4 = LetRegionR (
 redEx3 : Val
 redEx3 = StV ((0 , N) ∷  (1 , L) ∷ (2 , I 1) ∷ (3 , L) ∷ (4 , I 2) ∷ [])
 
-rtest3 : Eval (etenv , evenv , ex3) redEx3
+rtest3 : Eval (evenv , ex3) redEx3
 rtest3 = LetRegionR (
          LetLocStartR herev (
          LetLocAfterCR herev (
-         LetR (
-         LeafR (skipv (skipv herev)) herev LitR) (
+         LetR (LeafR (skipv (skipv herev)) herev LitR) (
          LetLocAfterVR (skipv herev) (
          LetR (LeafR (skipv (skipv (skipv (skipv herev)))) herev LitR) (
-         LetR (NodeR (skipv (skipv (skipv (skipv (skipv herev))))) (skipv (skipv (skipv (skipv herev)))) (
-         VarR (skipv (skipv herev))) (
-         VarR herev)) (
-         VarR herev)))))))
-
+         LetR (NodeR (skipv (skipv (skipv (skipv (skipv herev)))))
+                     (skipv (skipv (skipv (skipv herev))))
+                     (VarR (skipv (skipv herev)))
+                     (VarR herev))
+         (VarR herev)))))))
 
 --------------------------------------------------------------------------------
 -- Type safety
+
+-- When is a value compatible with a type v ∼ τ
+-- When is a runtime environment compatible with a typing context (ve ≈ te)
+
+data _∼_ : Val -> Ty -> Set
+data _≈_ : VEnv -> TEnv -> Set
+
+data _∼_ where
+  num~ : ∀ {n} -> LitV n ∼ IntTy
+  cursor~ : ∀ {st o} -> CurV st o ∼ CursorTy
+  packed~ : ∀ {l r t st} -> StV st ∼ PackedAt t l r
+  -- TODO: HACK to encode regions for now. They return a store, but are do not have a packed type ...
+  region~ : ∀ {st} -> StV st ∼ CursorTy
+
+data _≈_ where
+  e≈ : evenv ≈ etenv
+  x≈ : ∀ {x y v ty ve te} ->
+         x ≡ y -> v ∼ ty -> ve ≈ te -> ((x , v) , ve) ≈ ((y , ty) , te)
+
+-- Compatible environments mean that for every variable its value is
+-- compatible with its type
+
+ρ⇒vτ : ∀ {x v ty ve te} →
+       ve ≈ te -> ((x , v) ∈V ve) -> ((x , ty) ∈T te) -> v ∼ ty
+ρ⇒vτ e≈ ()
+ρ⇒vτ (x≈ refl v∼τ ρ≈Γ) herev heret = v∼τ
+ρ⇒vτ (x≈ refl v∼τ ρ≈Γ) herev (skipt {α = α} inΓ) =
+  ⊥-elim (toWitnessFalse α refl)
+ρ⇒vτ (x≈ refl v∼τ ρ≈Γ) (skipv {α = α} inρ) heret =
+  ⊥-elim (toWitnessFalse α refl)
+ρ⇒vτ (x≈ refl v∼τ ρ≈Γ) (skipv inρ) (skipt inΓ) = ρ⇒vτ ρ≈Γ inρ inΓ
+
+--------------------------------------------------------------------------------
+
+type-safety : ∀ {L1 R C T L2 e t V v} ->
+                (V ≈ T) ->
+                (L1 , R , C , T ⊢ e ∷ t , L2) -> Eval (V , e) v -> (v ∼ t)
+type-safety ve≈te LitT LitR = num~
+type-safety ve≈te (VarT x) (VarR y) = ρ⇒vτ ve≈te y x
+type-safety ve≈te (LetRegionT r tyb) (LetRegionR ev) =
+  let ve'≈te' = x≈ refl region~ ve≈te
+  in type-safety ve'≈te' tyb ev
+type-safety ve≈te (LetLocStartT tyj) (LetLocStartR x ev) =
+  let ve'≈te' = x≈ refl cursor~ ve≈te
+  in type-safety ve'≈te' tyj ev
+type-safety ve≈te (LetLocAfterVT x₁ tyj) (LetLocAfterVR x₂ ev) =
+  let ve'≈te' = x≈ refl cursor~ ve≈te
+  in type-safety ve'≈te' tyj ev
+type-safety ve≈te (LetLocAfterCT tyj) (LetLocAfterCR x ev) =
+  let ve'≈te' = x≈ refl cursor~ ve≈te
+  in type-safety ve'≈te' tyj ev
+type-safety ve≈te (LetPackedT tyj1 tyj2) (LetR ev1 ev2) =
+  let v1t1 = type-safety ve≈te tyj1 ev1
+      ve'≈te' = x≈ refl v1t1 ve≈te
+  in type-safety ve'≈te' tyj2 ev2
+-- TODO: This check is useless. Should be more strict.
+type-safety ve≈te (LeafT inL tyint) (LeafR rInV lInV ev) = packed~
+type-safety ve≈te (NodeT tyj tyj₁ x₁ x₂) (NodeR x₃ x₄ ev ev₁) = packed~
