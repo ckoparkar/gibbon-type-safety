@@ -87,6 +87,7 @@ data Ty where
   BoolTy   : Ty
   ProdTy   : List Ty -> Ty
   CursorTy : Ty
+  RegionTy : Ty
   ErrorTy  : String -> Exp -> Ty
 
 
@@ -218,6 +219,7 @@ substTy mp (PackedTy dc l1)  with mlookupLocVar l1 mp
 ... | just l2 = PackedTy dc l2
 ... | nothing = PackedTy dc l1
 substTy mp CursorTy = CursorTy
+substTy mp RegionTy = RegionTy
 substTy mp (ErrorTy msg ex) = ErrorTy msg ex
 substTy mp (PackedAt dc l1 reg) with mlookupLocVar l1 mp
 ... | just l2 = PackedAt dc l2 reg
