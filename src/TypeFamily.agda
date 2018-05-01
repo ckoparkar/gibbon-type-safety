@@ -1,7 +1,7 @@
 module TypeFamily where
 
 open import Data.Bool as B
-open import Data.String as Str
+open import Data.String as Str hiding (_++_)
 open import Data.Nat
 open import Data.Product
 open import Data.Sum
@@ -10,7 +10,6 @@ open import Relation.Binary.PropositionalEquality hiding ([_])
 open import Data.List as L
 open import Data.AVL.Sets as S
 open import Relation.Nullary.Decidable
-open import Relation.Binary.PropositionalEquality
 open import Data.Empty
 
 open import Syntax
@@ -334,7 +333,7 @@ data Eval : Closure -> Val -> Set where
             (l , CurV st o) ∈V ve ->
             Eval (ve , n) (LitV nv) ->
             Eval (ve , (LeafE l r n))
-                 (StV (st L.++ (o , L) ∷ L.[ (suc o , I nv) ]))
+                 (StV (st ++ (o , L) ∷ [ (suc o , I nv) ]))
 
 
   NodeR : ∀ {ve l r e1 e2 stx sty st o} ->
@@ -343,7 +342,7 @@ data Eval : Closure -> Val -> Set where
             Eval (ve , e1) (StV stx) ->
             Eval (ve , e2) (StV sty) ->
             Eval (ve , NodeE l r e1 e2)
-                 (StV (st L.++ L.[ (o , N) ] L.++ stx L.++ sty))
+                 (StV (st ++ L.[ (o , N) ] ++ stx ++ sty))
 
 
 rtest5 : Eval (evenv , LitE 42) (LitV 42)
@@ -495,7 +494,7 @@ data _↦_ : State -> State -> Set where
   LeafKR : ∀ {k ve l r st o n} ->
              (r , StV st) ∈V ve ->
              (l , CurV st o) ∈V ve ->
-             Return ((LeafK l r ve) ∷ k) (LitV n) ↦ Return k (StV (st L.++ (o , L) ∷ L.[ (suc o , I n) ]))
+             Return ((LeafK l r ve) ∷ k) (LitV n) ↦ Return k (StV (st ++ (o , L) ∷ [ (suc o , I n) ]))
 
 
 -----------------------------------------------------------------------------------------
