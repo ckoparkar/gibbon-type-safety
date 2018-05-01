@@ -151,6 +151,7 @@ data _,_,_,_⊢_::_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) -> 
                      -- l2 ∉A L1 ->
                      -- set after(l2) = True
                      -- l1 not in C
+                     (l2 , CursorTy) ∈T T ->
                      ((l1 , (false , (true , false))) , L1)
                      , R ,
                      ((AfterVariableC x l2 l1) , C) , ((l1 , CursorTy) , T) ⊢ bod :: t , L3 ->
@@ -162,6 +163,7 @@ data _,_,_,_⊢_::_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) -> 
 
    LetLocAfterCT :  ∀ {L1 L3 R C T l1 n bod t l2} ->
                       -- l1 not in C
+                      (l2 , CursorTy) ∈T T ->
                       -- l2 ∉A L1 ->
                       ((l1 , (false , (true , false))) , L1) , R ,
                       ((AfterConstantC n l2 l1) , C) , ((l1 , CursorTy) , T) ⊢ bod :: t , L3 ->
@@ -211,10 +213,10 @@ ex3 = LetRegionE "r" (
 test3 : ∀ {L1 L2 R C T} -> L1 , R , C , T  ⊢ ex3 :: PackedAt "Tree" "l0" "r" , L2
 test3 = LetRegionT notherer (
         LetLocStartT heret (
-        LetLocAfterCT (
+        LetLocAfterCT heret (
         LetPackedT (
         LeafT herel LitT) (
-        LetLocAfterVT heret (
+        LetLocAfterVT heret (skipt heret) (
         LetPackedT (
         LeafT herel LitT) (
         LetPackedT (
@@ -432,6 +434,22 @@ data _≈_ where
   let (v , inρ) = Γ⇒r ve≈te inT
   in v , skipv {α = α} inρ
 
+Γ⇒l : ∀ {x Γ ρ} -> ρ ≈ Γ -> ((x , CursorTy) ∈T Γ) -> Σ[ st ∈ Store ] (Σ[ o ∈ ℕ ] (x , CurV st o) ∈V ρ)
+Γ⇒l e≈ ()
+Γ⇒l (x≈ refl cursor~ ve≈te) heret = _ , (_ , herev)
+Γ⇒l (x≈ refl cursor~ ve≈te) (skipt {α = α} inT) =
+  let (v , w , inρ) = Γ⇒l ve≈te inT
+  in v , w , skipv {α = α} inρ
+Γ⇒l (x≈ refl num~ ve≈te) (skipt {α = α} inT) =
+  let (v , w , inρ) = Γ⇒l ve≈te inT
+  in v , w , skipv {α = α} inρ
+Γ⇒l (x≈ refl packed~ ve≈te) (skipt {α = α} inT) =
+  let (v , w , inρ) = Γ⇒l ve≈te inT
+  in v , w , skipv {α = α} inρ
+Γ⇒l (x≈ refl region~ ve≈te) (skipt {α = α} inT) =
+  let (v , w , inρ) = Γ⇒l ve≈te inT
+  in v , w , skipv {α = α} inρ
+
 --------------------------------------------------------------------------------
 
 type-safety : ∀ {L1 R C T L2 e t V v} ->
@@ -445,10 +463,10 @@ type-safety ve≈te (LetRegionT r tyb) (LetRegionR ev) =
 type-safety ve≈te (LetLocStartT _ tyj) (LetLocStartR _ ev) =
   let ve'≈te' = x≈ refl cursor~ ve≈te
   in type-safety ve'≈te' tyj ev
-type-safety ve≈te (LetLocAfterVT x₁ tyj) (LetLocAfterVR _ _ ev) =
+type-safety ve≈te (LetLocAfterVT _ _ tyj) (LetLocAfterVR _ _ ev) =
   let ve'≈te' = x≈ refl cursor~ ve≈te
   in type-safety ve'≈te' tyj ev
-type-safety ve≈te (LetLocAfterCT tyj) (LetLocAfterCR _ ev) =
+type-safety ve≈te (LetLocAfterCT _ tyj) (LetLocAfterCR _ ev) =
   let ve'≈te' = x≈ refl cursor~ ve≈te
   in type-safety ve'≈te' tyj ev
 type-safety ve≈te (LetPackedT tyj1 tyj2) (LetR ev1 ev2) =
@@ -481,6 +499,17 @@ data _↦_ : State -> State -> Set where
   LetLocStartSR : ∀ {k ve l r st bod} ->
                     (r , (StV st)) ∈V ve ->
                     Enter (ve , LetLocE l (StartOfLE r) bod) k ↦ Enter (((l , CurV st 0) , ve) , bod) k
+
+  LetLocAfterCSR : ∀ {ve l2 offset l1 bod k r1 n1} ->
+                     (l1 , CurV r1 n1) ∈V ve ->
+                     Enter (ve , LetLocE l2 (AfterConstantLE offset l1) bod) k ↦
+                     Enter (((l2 , CurV [] (n1 + offset)) , ve) , bod) k
+
+  LetLocAfterVSR : ∀ {ve l2 offset l1 bod k r1 n1 sz} ->
+                     (l1 , CurV r1 n1) ∈V ve ->
+                     SizeOf (StV r1) sz ->
+                     Enter (ve , LetLocE l2 (AfterVariableLE offset l1) bod) k ↦
+                     Enter (((l2 , CurV [] (1 + sz)) , ve) , bod) k
 
   LetSR   : ∀ {k ve x ty rhs bod} ->
              Enter (ve , LetE (x , ty , rhs) bod) k ↦ Enter (ve , rhs) (LetK x (ve , bod) ∷ k)
@@ -563,8 +592,9 @@ progress (EnterT (te , ve≈te , LitT) kt) = inj₂ (_ , LitSR)
 progress (EnterT (te , ve≈te , VarT inte) kt) = inj₂ (_ , VarSR (proj₂ (Γ⇒v ve≈te inte)))
 progress (EnterT (te , ve≈te , LetRegionT x x₁) kt) = inj₂ (_ , LetRegionSR)
 progress (EnterT (te , ve≈te , LetLocStartT y x) kt) = inj₂ (_ , LetLocStartSR (proj₂ (Γ⇒r ve≈te y)))
-progress (EnterT (te , ve≈te , LetLocAfterVT x₁ x) kt) = {!!}
-progress (EnterT (te , ve≈te , LetLocAfterCT x) kt) = {!!}
+progress (EnterT (te , ve≈te , LetLocAfterVT _ y x) kt) =
+  inj₂ (_ , (LetLocAfterVSR (proj₂ (proj₂ (Γ⇒l ve≈te y))) szStV))
+progress (EnterT (te , ve≈te , LetLocAfterCT y x) kt) = inj₂ (_ , (LetLocAfterCSR (proj₂ (proj₂ (Γ⇒l ve≈te y)))))
 progress (EnterT (te , ve≈te , LetPackedT x x₁) kt) = inj₂ (_ , LetSR)
 progress (EnterT (te , ve≈te , LeafT x x₁) kt) = inj₂ (_ , LeafSR)
 progress (EnterT (te , ve≈te , NodeT x x₁ x₃ x₄) kt) = {!!}
@@ -576,12 +606,12 @@ progress (ReturnT (PushKT (LetKT x₁) x₂) kt) = inj₂ (_ , LetKR)
 -- If we are well-typed and make a step then the next state is also
 -- well-typed
 
-preservation : ∀ {s s' τ} → s ↦ s' → s ⊢s τ → s' ⊢s τ
-preservation LitSR (EnterT x x₁) = {!!}
-preservation (VarSR x₁) (EnterT x₂ x₃) = {!!}
-preservation LetRegionSR (EnterT x x₁) = {!!}
-preservation (LetLocStartSR x) (EnterT x₁ x₂) = {!!}
-preservation LetSR (EnterT x₁ x₂) = {!!}
-preservation LetKR (ReturnT x₁ x₂) = {!!}
-preservation LeafSR (EnterT x x₁) = {!!}
-preservation (LeafKR x x₁) (ReturnT x₂ x₃) = {!!}
+-- preservation : ∀ {s s' τ} → s ↦ s' → s ⊢s τ → s' ⊢s τ
+-- preservation LitSR (EnterT x x₁) = {!!}
+-- preservation (VarSR x₁) (EnterT x₂ x₃) = {!!}
+-- preservation LetRegionSR (EnterT x x₁) = {!!}
+-- preservation (LetLocStartSR x) (EnterT x₁ x₂) = {!!}
+-- preservation LetSR (EnterT x₁ x₂) = {!!}
+-- preservation LetKR (ReturnT x₁ x₂) = {!!}
+-- preservation LeafSR (EnterT x x₁) = {!!}
+-- preservation (LeafKR x x₁) (ReturnT x₂ x₃) = {!!}
