@@ -431,3 +431,56 @@ type-safety ve≈te (LetPackedT tyj1 tyj2) (LetR ev1 ev2) =
 -- TODO: This check is useless. Should be more strict.
 type-safety ve≈te (LeafT inL tyint) (LeafR rInV lInV ev) = packed~
 type-safety ve≈te (NodeT tyj tyj₁ x₁ x₂) (NodeR x₃ x₄ ev ev₁) = packed~
+
+
+--------------------------------------------------------------------------------
+-- Progress and preservation
+
+data Frame : Set where
+  LetK  : Var -> Closure -> Frame
+  LeafK : LocVar -> Region -> VEnv -> Frame
+
+Cont : Set
+Cont = List Frame
+
+data State : Set where
+  Enter  : Closure -> Cont -> State
+  Return : Cont -> Val -> State
+
+data _↦_ : State -> State -> Set where
+  LitR : ∀ {k ve n} -> Enter (ve , LitE n) k ↦ Return k (LitV n)
+  VarR : ∀ {k ve x v} -> (x , v) ∈V ve -> Enter (ve , VarE x) k ↦ Return k v
+  LetRegionSR : ∀ {k ve r bod} -> Enter (ve , LetRegionE r bod) k ↦ Enter (((r , StV []) , ve) , bod) k
+  LetLocStartSR : ∀ {k ve l r st bod} ->
+                    (r , (StV st)) ∈V ve ->
+                    Enter (ve , LetLocE l (StartOfLE r) bod) k ↦ Enter (((l , CurV st 0) , ve) , bod) k
+
+  LetR   : ∀ {k ve x ty rhs bod} ->
+    Enter (ve , LetE (x , ty , rhs) bod) k ↦ Enter (ve , rhs) (LetK x (ve , bod) ∷ k)
+
+  LetKR  : ∀ {ve k x bod v} →
+    Return (LetK x (ve , bod) ∷ k) v ↦ Enter (((x , v) , ve) , bod) k
+
+  LeafR : ∀ {k ve l r e} ->
+             Enter (ve , LeafE l r e) k ↦ Enter (ve , e) (LeafK l r ve ∷ k)
+
+  LeafKR : ∀ {k ve l r st o n} ->
+             (r , StV st) ∈V ve ->
+             (l , CurV st o) ∈V ve ->
+             Return ((LeafK l r ve) ∷ k) (LitV n) ↦ Return k (StV (st L.++ (o , L) ∷ L.[ (suc o , I n) ]))
+
+
+-----------------------------------------------------------------------------------------
+
+infixr 10 _•_
+
+data _↦*_ : State → State → Set where
+  ∎   : ∀ {s} → s ↦* s
+  _•_ : ∀ {s₁ s₂ s₃} → s₁ ↦ s₂ → s₂ ↦* s₃ → s₁ ↦* s₃
+
+SEval : Exp -> Val -> Set
+SEval e v = Enter (evenv , e) [] ↦* (Return [] v)
+
+srtest4 : SEval ex4 (StV ((0 , L) ∷ (1 , I 1) ∷ []))
+srtest4 = LetRegionSR • LetLocStartSR herev • LetR • LeafR • LitR • LeafKR (skipv herev) herev •
+          LetKR • VarR herev • ∎
