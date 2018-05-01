@@ -217,8 +217,7 @@ test3 = LetRegionT notherer (
         LeafT herel LitT) (
         LetPackedT (
         NodeT (VarT (skipt (skipt heret))) (VarT heret) hereac hereav) (
-        VarT heret))))
-        )))
+        VarT heret)))))))
 
 -- Ex3: (Leaf 1)
 ex4 : Exp
@@ -260,6 +259,28 @@ data _∈V_ : (String × Val) -> VEnv -> Set where
            {α : False (s Str.≟ s')} -> (s , τ) ∈V Γ -> (s , τ) ∈V ((s' , τ') , Γ)
 
 --------------------------------------------------------------------------------
+-- SizeOf relation
+
+data SizeOf : Val -> ℕ -> Set where
+  szStV : ∀ {st} -> SizeOf (StV st) (length st)
+
+sztest1 : SizeOf (StV ((0 , L) ∷ (1 , I 1) ∷ [])) 2
+sztest1 = szStV
+
+-- data SizeOf : Exp -> ℕ -> Set where
+--   szLeaf : ∀ {l r n } -> SizeOf (LeafE l r n) 2
+--   szNode : ∀ {l r e1 e2 n1 n2} ->
+--              SizeOf e1 n1 ->
+--              SizeOf e2 n2 ->
+--              SizeOf (NodeE l r e1 e2) (1 + n1 + n2)
+
+-- sztest2 : ∀ {n r l1 l2 l3} -> SizeOf (NodeE l1 r (LeafE l2 r n) (LeafE l3 r n)) 5
+-- sztest2 = szNode szLeaf szLeaf
+
+-- sztest3 : ∀ {n r l1 l2 l4 l5} -> SizeOf (NodeE l1 r (LeafE l2 r n) (NodeE l5 r (LeafE l4 r n) (LeafE l5 r n))) 8
+-- sztest3 = szNode szLeaf (szNode szLeaf szLeaf)
+
+--------------------------------------------------------------------------------
 -- Reduction relation
 
 Closure : Set
@@ -288,14 +309,16 @@ data Eval : Closure -> Val -> Set where
 
   LetLocAfterCR : ∀ {ve l2 offset l1 n1 r1 bod v} ->
                     (l1 , (CurV r1 n1)) ∈V ve ->
-                    Eval (((l2 , CurV r1 (n1 + offset)) , ve) , bod) v ->
+                    Eval (((l2 , CurV [] (n1 + offset)) , ve) , bod) v ->
                     Eval (ve , (LetLocE l2 (AfterConstantLE offset l1) bod)) v
 
-  -- The 2 needs to be replaced with the "size" of the element at l1
-  LetLocAfterVR : ∀ {ve l2 l1 n1 r1 bod v x} ->
-                    (l1 , (CurV r1 n1)) ∈V ve ->
-                    Eval (((l2 , CurV r1 (n1 + 2)) , ve) , bod) v ->
+
+  LetLocAfterVR : ∀ {ve l2 l1 r1 bod v x sz} ->
+                    (x , (StV r1)) ∈V ve ->
+                    SizeOf (StV r1) sz ->
+                    Eval (((l2 , CurV [] (1 + sz)) , ve) , bod) v ->
                     Eval (ve , (LetLocE l2 (AfterVariableLE x l1) bod)) v
+
 
   LetR : ∀ {ve x ty rhs vrhs bod v} ->
            Eval (ve , rhs) vrhs ->
@@ -340,7 +363,7 @@ rtest3 = LetRegionR (
          LetLocStartR herev (
          LetLocAfterCR herev (
          LetR (LeafR (skipv (skipv herev)) herev LitR) (
-         LetLocAfterVR (skipv herev) (
+         LetLocAfterVR herev szStV (
          LetR (LeafR (skipv (skipv (skipv (skipv herev)))) herev LitR) (
          LetR (NodeR (skipv (skipv (skipv (skipv (skipv herev)))))
                      (skipv (skipv (skipv (skipv herev))))
@@ -392,13 +415,13 @@ type-safety ve≈te (VarT x) (VarR y) = ρ⇒vτ ve≈te y x
 type-safety ve≈te (LetRegionT r tyb) (LetRegionR ev) =
   let ve'≈te' = x≈ refl region~ ve≈te
   in type-safety ve'≈te' tyb ev
-type-safety ve≈te (LetLocStartT tyj) (LetLocStartR x ev) =
+type-safety ve≈te (LetLocStartT tyj) (LetLocStartR _ ev) =
   let ve'≈te' = x≈ refl cursor~ ve≈te
   in type-safety ve'≈te' tyj ev
-type-safety ve≈te (LetLocAfterVT x₁ tyj) (LetLocAfterVR x₂ ev) =
+type-safety ve≈te (LetLocAfterVT x₁ tyj) (LetLocAfterVR _ _ ev) =
   let ve'≈te' = x≈ refl cursor~ ve≈te
   in type-safety ve'≈te' tyj ev
-type-safety ve≈te (LetLocAfterCT tyj) (LetLocAfterCR x ev) =
+type-safety ve≈te (LetLocAfterCT tyj) (LetLocAfterCR _ ev) =
   let ve'≈te' = x≈ refl cursor~ ve≈te
   in type-safety ve'≈te' tyj ev
 type-safety ve≈te (LetPackedT tyj1 tyj2) (LetR ev1 ev2) =
