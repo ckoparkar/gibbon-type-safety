@@ -75,7 +75,6 @@ data Exp where
   ProjE : ℕ -> Exp -> Exp
   CaseE : Exp -> List CaseBranch -> Exp
   DataConE : LocVar -> DataCon -> List Exp -> Exp
-  RetE : (List LocVar) -> Exp -> Exp
 
 CaseBranch = DataCon × (List (Var × LocVar) × Exp)
 
