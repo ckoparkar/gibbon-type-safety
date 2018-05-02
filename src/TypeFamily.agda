@@ -198,13 +198,13 @@ data _,_,_,_⊢_::_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) -> 
              L1 , R , C , T  ⊢ LeafE l1 r1 arg :: (PackedAt "Tree" l1 r1) , L2
 
 
-   NodeT : ∀ {L1 L2 L3 R C T l0 r0 dc1 l1 r1 dc2 l2 x y} ->
-              L1 , R , C , T ⊢ x :: PackedAt dc1 l1 r1 , L2 ->
-              L2 , R , C , T ⊢ y :: PackedAt dc2 l2 r1 , L3 ->
+   NodeT : ∀ {L1 L2 L3 R C T l0 r l1 l2 x y} ->
+              L1 , R , C , T ⊢ x :: PackedAt "Tree" l1 r , L2 ->
+              L2 , R , C , T ⊢ y :: PackedAt "Tree" l2 r , L3 ->
               (AfterConstantC 1 l0 l1) ∈C C ->
               (AfterVariableC {!!} l1 l2) ∈C C ->
               ----------------------------------------------------------------
-              L1 , R , C , T  ⊢ NodeE l0 r0 x y :: (PackedAt "Tree" l0 r0) , L3
+              L1 , R , C , T  ⊢ NodeE l0 r x y :: (PackedAt "Tree" l0 r) , L3
 
 
 -- Ex3: (Node (Leaf 1) (Leaf 2))
@@ -499,7 +499,7 @@ type-safety ve≈te (NodeT tyj tyj₁ x₁ x₂) (NodeR x₃ x₄ ev ev₁) = pa
 data Frame : Set where
   LetK  : Var -> Closure -> Frame
   LeafK : LocVar -> Region -> VEnv -> Frame
-  NodeLK : LocVar -> Region -> Exp -> VEnv -> Frame
+  NodeLK : LocVar -> Region -> Closure -> Frame
   NodeRK : LocVar -> Region -> Val -> Frame
 
 Cont : Set
@@ -543,10 +543,10 @@ data _↦_ : State -> State -> Set where
              Return ((LeafK l r ve) ∷ k) (LitV n) ↦ Return k (StV (st ++ (o , L) ∷ [ (suc o , I n) ]))
 
   NodeSR : ∀ {l r x y ve k} ->
-             Enter (ve , NodeE l r x y) k ↦ Enter (ve , x) (NodeLK l r y ve ∷ k)
+             Enter (ve , NodeE l r x y) k ↦ Enter (ve , x) (NodeLK l r (ve , y) ∷ k)
 
   NodeLKR : ∀ {l r y ve k stx} ->
-              Return (NodeLK l r y ve ∷ k) stx ↦ Enter (ve , y) (NodeRK l r stx ∷ k)
+              Return (NodeLK l r (ve , y) ∷ k) stx ↦ Enter (ve , y) (NodeRK l r stx ∷ k)
 
   NodeRKR : ∀ {l r stx sty st o ve k} ->
               (r , StV st) ∈V ve ->
@@ -587,13 +587,13 @@ data _⊢f_ : Frame -> (Ty × Ty) -> Set where
   LeafKT : ∀ {l r ve} ->
              LeafK l r ve ⊢f (IntTy , PackedAt "Tree" l r)
 
-  -- NodeLKT : ∀ {L1 L2 R C cl l y ve t1 t2 r ty} ->
-  --             L1 , R , C , cl ⊢c ty , L2 ->
-  --             NodeLK l r y ve ⊢f (t1 , t2)
+  NodeLKT : ∀ {L1 L2 R C l y ve r l1 l2} ->
+              L1 , R , C , (ve , y) ⊢c PackedAt "Tree" l2 r , L2 ->
+              NodeLK l r (ve , y) ⊢f (PackedAt "Tree" l1 r , PackedAt "Tree" l r)
 
-  -- NodeRKT : ∀ {l r y ve t1 t2 sty L1 L2 R C cl ty} ->
-  --             L1 , R , C , cl ⊢c ty , L2 ->
-  --             NodeRK l r sty ⊢f (t1 , t2)
+  NodeRKT : ∀ {l r stx l1 l2} ->
+              (stx ∼ PackedAt "Tree" l1 r) ->
+              NodeRK l r stx ⊢f (PackedAt "Tree" l2 r , PackedAt "Tree" l r)
 
 
 -- Continuation typing κ ⊢κ (τ , τ)
@@ -641,11 +641,8 @@ progress (EnterT (te , ve≈te , NodeT tyjx tyjy c1 c2) kt) = inj₂ (_ , NodeSR
 progress (ReturnT EmptyKT v∼t) = inj₁ (F v∼t)
 progress (ReturnT (PushKT (LetKT x₁) x₂) kt) = inj₂ (_ , LetKR)
 progress (ReturnT (PushKT LeafKT x) num~) = inj₂ (_ , LeafKR {!!} {!!})
-
-{-
-progress (ReturnT (PushKT (NodeLKT y) x) x₁) = inj₂ (_ , NodeLKR)
-progress (ReturnT (PushKT (NodeRKT y) x) x₁) = {!!}
--}
+progress (ReturnT (PushKT (NodeLKT x) x₁) x₂) = inj₂ (_ , NodeLKR)
+progress (ReturnT (PushKT (NodeRKT packed~) b) packed~) = inj₂ (_ , NodeRKR {!!} {!!})
 
 -- Preservation
 -- If we are well-typed and make a step then the next state is also
@@ -669,22 +666,12 @@ preservation LetKR (ReturnT (PushKT (LetKT pct) kt) v∼t) = EnterT (pct v∼t) 
 preservation LeafSR (EnterT (te , ve≈te , LeafT x tyj) kt) =
   EnterT (te , ve≈te , tyj) (PushKT LeafKT kt)
 preservation (LeafKR _ _) (ReturnT (PushKT LeafKT kt) v∼t) = ReturnT kt packed~
-{-# CATCHALL #-}
-preservation _ _ = {!!}
-
-{-
-preservation NodeSR (EnterT (proj₃ , proj₄ , NodeT proj₅ proj₆ x₂ x₃) x₄) = {!!}
-preservation NodeLKR (ReturnT (PushKT x x₁) x₂) = {!!}
-preservation (NodeRKR x x₁) (ReturnT (PushKT x₂ x₃) x₄) = {!!}
--}
-{-
 preservation NodeSR (EnterT (te , ve≈te , NodeT tyj1 tyj2 _ _) kt) =
-  EnterT (te , ve≈te , tyj1) (PushKT (NodeLKT (te , ve≈te , tyj1)) kt)
-preservation NodeLKR (ReturnT (PushKT (NodeLKT (te , ve≈te , tyj)) kt) v∼t) =
-  EnterT ({!!} , ({!!} , {!!})) (PushKT (NodeRKT (te , (ve≈te , tyj))) kt)
-  -- EnterT ? (PushKT (NodeRKT (? , ?)) kt) , {!!})) kt)
-preservation (NodeRKR x x₁) (ReturnT (PushKT y kt) v∼t) = {!!}
--}
+  EnterT (te , ve≈te , tyj1) (PushKT (NodeLKT (te , ve≈te , tyj2)) kt)
+preservation NodeLKR (ReturnT (PushKT (NodeLKT (te , ve≈te , tyj)) kt) vt) =
+  EnterT (te , ve≈te , tyj) (PushKT (NodeRKT vt) kt)
+preservation (NodeRKR a b) (ReturnT (PushKT (NodeRKT c) d) packed~) =
+  ReturnT d packed~
 
 
 -- Main theorem
