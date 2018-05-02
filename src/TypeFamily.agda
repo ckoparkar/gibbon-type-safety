@@ -30,8 +30,8 @@ data _∈T_ : (String × Ty) -> TEnv -> Set where
 --------------------------------------------------------------------------------
 -- Location type state environment: contains information about whether a location:
 -- (1) has been written to,
--- (2) has been aliased (some other location depends on this one)
-
+-- (2) has been aliased (if l₂ = l₁ + 1; then this bit is true for l₁)
+-- (3) aliases another location (if l₂ = l₁ + 1; then this bit is true for l₂)
 
 data LEnv : Set where
   elenv : LEnv
@@ -50,7 +50,10 @@ data _∉L_ : Region -> LEnv -> Set where
 
 {-
 
--- TODO: Define a substitution relation in Agda
+These relations aren't being used anywhere. Essentially, we do not
+update or check any properties about the locations.
+TODO.
+
 
 -- Written
 data _∈W_ : (LocVar × (Bool × (Bool × Bool))) -> LEnv -> Set where
@@ -95,6 +98,7 @@ data _∈R_ : Region -> REnv -> Set where
 --------------------------------------------------------------------------------
 -- Constraint environment
 
+
 data CEnv : Set where
   ecenv : CEnv
   _,_   : LocationConstraint -> CEnv -> CEnv
@@ -115,8 +119,6 @@ data _∈C_ : LocationConstraint -> CEnv -> Set where
              (AfterVariableC s1 l0 l1) ∈C ((AfterVariableC s2 l0' l1') , C)
 
 --------------------------------------------------------------------------------
-
--- infixr 4 _,_,_,_⊢_∷_,_
 
 data _,_,_,_⊢_::_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) -> (e : Exp) -> (t : Ty) -> (L' : LEnv) -> Set where
    LitT       : ∀ {L R C T n} ->
@@ -140,14 +142,12 @@ data _,_,_,_⊢_::_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) -> 
 
 
    LetLocStartT : ∀ {L1 L3 R C T l1 r1 bod t} ->
-                    -- -- ∃ some loc with before set to true
-                    -- -- l1 not in C
+                    -- ∃ some loc with _before_ set to true
                     (r1 , RegionTy) ∈T T ->
                     l1 ∉L L1 ->
                     ((l1 , (false , false , false)) , L1) , R ,
                     ((StartOfC l1 r1) , C) , ((l1 , CursorTy) , T) ⊢ bod :: t , L3 ->
                     -- (l1 , (true , (b , a))) ∈W L3 ->
-                    -- L4 = L3 - l1
                     -------------------------------------------------------
                     L1 , R , C , T  ⊢ LetLocE l1 (StartOfLE r1) bod :: t , L3
 
@@ -157,32 +157,26 @@ data _,_,_,_⊢_::_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) -> 
                      -- l2 ∈W L1 ->
                      -- l2 ∉A L1 ->
                      -- set after(l2) = True
-                     -- l1 not in C
                      (l2 , CursorTy) ∈T T ->
                      l1 ∉L L1 ->
                      ((l1 , (false , (true , false))) , L1)
                      , R ,
                      ((AfterVariableC x l2 l1) , C) , ((l1 , CursorTy) , T) ⊢ bod :: t , L3 ->
                      -- l1 ∈W L3 ->
-                     -- L4 = L3 - l1
                      ----------------------------------------------------------------
                      L1 , R , C , T  ⊢ LetLocE l1 (AfterVariableLE x l2) bod :: t , L3
 
 
    LetLocAfterCT :  ∀ {L1 L3 R C T l1 n bod t l2} ->
-                      -- l1 not in C
                       (l2 , CursorTy) ∈T T ->
                       l1 ∉L L1 ->
                       -- l2 ∉A L1 ->
                       ((l1 , (false , (true , false))) , L1) , R ,
                       ((AfterConstantC n l2 l1) , C) , ((l1 , CursorTy) , T) ⊢ bod :: t , L3 ->
                       -- l1 ∈W L3 ->
-                      -- L4 = L3 - l1
                       ----------------------------------------------------------------
                       L1 , R , C , T  ⊢ LetLocE l1 (AfterConstantLE n l2) bod :: t , L3
 
-
-   -- Add a let scalar rule ...
 
    LetPackedT : ∀ {L1 L2 L3 R C T tycon1 l1 r1 x rhs bod tycon2 l2 r2} ->
                   L1 , R , C , T ⊢ rhs :: (PackedAt tycon1 l1 r1) , L2 ->
@@ -294,7 +288,7 @@ sztest1 = szStV
 -- sztest3 = szNode szLeaf (szNode szLeaf szLeaf)
 
 --------------------------------------------------------------------------------
--- Reduction relation
+-- Reduction relation (version 1)
 
 Closure : Set
 Closure = VEnv × Exp
@@ -397,7 +391,7 @@ data _∼_ where
   num~ : ∀ {n} -> LitV n ∼ IntTy
   cursor~ : ∀ {st o} -> CurV st o ∼ CursorTy
   packed~ : ∀ {l r t st} -> StV st ∼ PackedAt t l r
-  -- TODO: HACK to encode regions for now. They return a store, but are do not have a packed type ...
+  -- Regions return a store, but do not have a packed type ...
   region~ : ∀ {st} -> StV st ∼ RegionTy
 
 data _≈_ where
@@ -411,68 +405,65 @@ data _≈_ where
 ρ⇒vτ : ∀ {x v ty ve te} →
        ve ≈ te -> ((x , v) ∈V ve) -> ((x , ty) ∈T te) -> v ∼ ty
 ρ⇒vτ e≈ ()
-ρ⇒vτ (x≈ refl v∼τ ρ≈Γ) herev heret = v∼τ
-ρ⇒vτ (x≈ refl v∼τ ρ≈Γ) herev (skipt {α = α} inΓ) =
+ρ⇒vτ (x≈ refl v∼τ ve≈te) herev heret = v∼τ
+ρ⇒vτ (x≈ refl v∼τ ve≈te) herev (skipt {α = α} inΓ) =
   ⊥-elim (toWitnessFalse α refl)
-ρ⇒vτ (x≈ refl v∼τ ρ≈Γ) (skipv {α = α} inρ) heret =
+ρ⇒vτ (x≈ refl v∼τ ve≈te) (skipv {α = α} inρ) heret =
   ⊥-elim (toWitnessFalse α refl)
-ρ⇒vτ (x≈ refl v∼τ ρ≈Γ) (skipv inρ) (skipt inΓ) = ρ⇒vτ ρ≈Γ inρ inΓ
+ρ⇒vτ (x≈ refl v∼τ ve≈te) (skipv inρ) (skipt inΓ) = ρ⇒vτ ve≈te inρ inΓ
 
 
-Γ⇒v : ∀ {x τ Γ ρ} -> ρ ≈ Γ -> ((x , τ) ∈T Γ) -> Σ[ v ∈ Val ] (x , v) ∈V ρ
+Γ⇒v : ∀ {x t ve te} -> ve ≈ te -> ((x , t) ∈T te) -> Σ[ v ∈ Val ] (x , v) ∈V ve
 Γ⇒v e≈ ()
-Γ⇒v (x≈ refl v∼τ ρ≈Γ) heret = _ , herev
-Γ⇒v (x≈ refl v∼τ ρ≈Γ) (skipt {α = α} inΓ) =
-  let (v , inρ) = Γ⇒v ρ≈Γ inΓ
-  in v , skipv {α = α} inρ
+Γ⇒v (x≈ refl v∼t ve≈te) heret = _ , herev
+Γ⇒v (x≈ refl v∼t ve≈te) (skipt {α = α} inT) =
+  let (v , inV) = Γ⇒v ve≈te inT
+  in v , skipv {α = α} inV
 
 
-Γ⇒r : ∀ {x Γ ρ} -> ρ ≈ Γ -> ((x , RegionTy) ∈T Γ) -> Σ[ st ∈ Store ] (x , StV st) ∈V ρ
+-- | If a variable of type RegionTy bound in Γ, it also binds a store in the "value environment"
+Γ⇒r : ∀ {x te ve} -> ve ≈ te -> ((x , RegionTy) ∈T te) -> Σ[ st ∈ Store ] (x , StV st) ∈V ve
 Γ⇒r e≈ ()
 Γ⇒r (x≈ refl region~ ve≈te) heret = _ , herev
 Γ⇒r (x≈ refl region~ ve≈te) (skipt {α = α} inT) =
-  let (v , inρ) = Γ⇒r ve≈te inT
-  in v , skipv {α = α} inρ
+  let (v , inV) = Γ⇒r ve≈te inT
+  in v , skipv {α = α} inV
 Γ⇒r (x≈ refl num~ ve≈te) (skipt {α = α} inT) =
-  let (v , inρ) = Γ⇒r ve≈te inT
-  in v , skipv {α = α} inρ
+  let (v , inV) = Γ⇒r ve≈te inT
+  in v , skipv {α = α} inV
 Γ⇒r (x≈ refl cursor~ ve≈te) (skipt {α = α} inT) =
-  let (v , inρ) = Γ⇒r ve≈te inT
-  in v , skipv {α = α} inρ
+  let (v , inV) = Γ⇒r ve≈te inT
+  in v , skipv {α = α} inV
 Γ⇒r (x≈ refl packed~ ve≈te) (skipt {α = α} inT) =
-  let (v , inρ) = Γ⇒r ve≈te inT
-  in v , skipv {α = α} inρ
+  let (v , inV) = Γ⇒r ve≈te inT
+  in v , skipv {α = α} inV
 
-Γ⇒l : ∀ {x Γ ρ} -> ρ ≈ Γ -> ((x , CursorTy) ∈T Γ) -> Σ[ st ∈ Store ] (Σ[ o ∈ ℕ ] (x , CurV st o) ∈V ρ)
+
+-- | If a variable of type CursorTy bound in Γ, it also binds a Cursor in the "value environment"
+Γ⇒l : ∀ {x te ve} -> ve ≈ te -> ((x , CursorTy) ∈T te) -> Σ[ st ∈ Store ] (Σ[ o ∈ ℕ ] (x , CurV st o) ∈V ve)
 Γ⇒l e≈ ()
 Γ⇒l (x≈ refl cursor~ ve≈te) heret = _ , (_ , herev)
 Γ⇒l (x≈ refl cursor~ ve≈te) (skipt {α = α} inT) =
-  let (v , w , inρ) = Γ⇒l ve≈te inT
-  in v , w , skipv {α = α} inρ
+  let (v , w , inV) = Γ⇒l ve≈te inT
+  in v , w , skipv {α = α} inV
 Γ⇒l (x≈ refl num~ ve≈te) (skipt {α = α} inT) =
-  let (v , w , inρ) = Γ⇒l ve≈te inT
-  in v , w , skipv {α = α} inρ
+  let (v , w , inV) = Γ⇒l ve≈te inT
+  in v , w , skipv {α = α} inV
 Γ⇒l (x≈ refl packed~ ve≈te) (skipt {α = α} inT) =
-  let (v , w , inρ) = Γ⇒l ve≈te inT
-  in v , w , skipv {α = α} inρ
+  let (v , w , inV) = Γ⇒l ve≈te inT
+  in v , w , skipv {α = α} inV
 Γ⇒l (x≈ refl region~ ve≈te) (skipt {α = α} inT) =
-  let (v , w , inρ) = Γ⇒l ve≈te inT
-  in v , w , skipv {α = α} inρ
-
-v∼t⇒v : (v : Val) -> (t : Ty) -> v ∼ t -> Val
-v∼t⇒v (LitV n) IntTy num~ = LitV n
-v∼t⇒v (CurV st o) .CursorTy cursor~ = (CurV st o)
-v∼t⇒v (StV st) .(PackedAt _ _ _) packed~ = (StV st)
-v∼t⇒v (StV st) .RegionTy region~ = (StV st)
+  let (v , w , inV) = Γ⇒l ve≈te inT
+  in v , w , skipv {α = α} inV
 
 --------------------------------------------------------------------------------
+-- Type safety (version 1)
 
 type-safety : ∀ {L1 R C T L2 e t V v} ->
-                (V ≈ T) ->
-                (L1 , R , C , T ⊢ e :: t , L2) -> Eval (V , e) v -> (v ∼ t)
+                (V ≈ T) -> (L1 , R , C , T ⊢ e :: t , L2) -> Eval (V , e) v -> (v ∼ t)
 type-safety ve≈te LitT LitR = num~
 type-safety ve≈te (VarT x) (VarR y) = ρ⇒vτ ve≈te y x
-type-safety ve≈te (LetRegionT r tyb) (LetRegionR ev) =
+type-safety ve≈te (LetRegionT _ tyb) (LetRegionR ev) =
   let ve'≈te' = x≈ refl region~ ve≈te
   in type-safety ve'≈te' tyb ev
 type-safety ve≈te (LetLocStartT _ _ tyj) (LetLocStartR _ ev) =
@@ -489,8 +480,8 @@ type-safety ve≈te (LetPackedT tyj1 tyj2) (LetR ev1 ev2) =
       ve'≈te' = x≈ refl v1t1 ve≈te
   in type-safety ve'≈te' tyj2 ev2
 -- TODO: This check is useless. Should be more strict.
-type-safety ve≈te (LeafT inL tyint) (LeafR rInV lInV ev) = packed~
-type-safety ve≈te (NodeT tyj tyj₁ x₁ x₂) (NodeR x₃ x₄ ev ev₁) = packed~
+type-safety ve≈te (LeafT _ _) (LeafR _ _ _) = packed~
+type-safety ve≈te (NodeT _ _ _ _) (NodeR _ _ _ _) = packed~
 
 
 --------------------------------------------------------------------------------
@@ -509,6 +500,7 @@ data State : Set where
   Enter  : Closure -> Cont -> State
   Return : Cont -> Val -> State
 
+-- Reduction relation (version 2)
 data _↦_ : State -> State -> Set where
   LitSR : ∀ {k ve n} -> Enter (ve , LitE n) k ↦ Return k (LitV n)
   VarSR : ∀ {k ve x v} -> (x , v) ∈V ve -> Enter (ve , VarE x) k ↦ Return k v
@@ -629,20 +621,20 @@ data Final : State -> Ty -> Set where
 
 progress : ∀ {s τ} -> s ⊢s τ -> (Final s τ) ⊎ (Σ[ s' ∈ State ] s ↦ s')
 progress (EnterT (te , ve≈te , LitT) kt) = inj₂ (_ , LitSR)
-progress (EnterT (te , ve≈te , VarT inte) kt) = inj₂ (_ , VarSR (proj₂ (Γ⇒v ve≈te inte)))
-progress (EnterT (te , ve≈te , LetRegionT x x₁) kt) = inj₂ (_ , LetRegionSR)
-progress (EnterT (te , ve≈te , LetLocStartT y _ x) kt) = inj₂ (_ , LetLocStartSR (proj₂ (Γ⇒r ve≈te y)))
-progress (EnterT (te , ve≈te , LetLocAfterVT _ y _ x) kt) =
-  inj₂ (_ , (LetLocAfterVSR (proj₂ (proj₂ (Γ⇒l ve≈te y))) szStV))
+progress (EnterT (te , ve≈te , VarT inT) kt) = inj₂ (_ , VarSR (proj₂ (Γ⇒v ve≈te inT)))
+progress (EnterT (te , ve≈te , LetRegionT _ _) kt) = inj₂ (_ , LetRegionSR)
+progress (EnterT (te , ve≈te , LetLocStartT inT _ _) kt) = inj₂ (_ , LetLocStartSR (proj₂ (Γ⇒r ve≈te inT)))
+progress (EnterT (te , ve≈te , LetLocAfterVT _ inT _ _) kt) =
+  inj₂ (_ , (LetLocAfterVSR (proj₂ (proj₂ (Γ⇒l ve≈te inT))) szStV))
 progress (EnterT (te , ve≈te , LetLocAfterCT y _ x) kt) = inj₂ (_ , (LetLocAfterCSR (proj₂ (proj₂ (Γ⇒l ve≈te y)))))
-progress (EnterT (te , ve≈te , LetPackedT x x₁) kt) = inj₂ (_ , LetSR)
-progress (EnterT (te , ve≈te , LeafT x x₁) kt) = inj₂ (_ , LeafSR)
+progress (EnterT (te , ve≈te , LetPackedT _ _) kt) = inj₂ (_ , LetSR)
+progress (EnterT (te , ve≈te , LeafT _ _) kt) = inj₂ (_ , LeafSR)
 progress (EnterT (te , ve≈te , NodeT tyjx tyjy c1 c2) kt) = inj₂ (_ , NodeSR)
 progress (ReturnT EmptyKT v∼t) = inj₁ (F v∼t)
-progress (ReturnT (PushKT (LetKT x₁) x₂) kt) = inj₂ (_ , LetKR)
+progress (ReturnT (PushKT (LetKT _) _) kt) = inj₂ (_ , LetKR)
 progress (ReturnT (PushKT LeafKT x) num~) = inj₂ (_ , LeafKR {!!} {!!})
-progress (ReturnT (PushKT (NodeLKT x) x₁) x₂) = inj₂ (_ , NodeLKR)
-progress (ReturnT (PushKT (NodeRKT packed~) b) packed~) = inj₂ (_ , NodeRKR {!!} {!!})
+progress (ReturnT (PushKT (NodeLKT _) _) _) = inj₂ (_ , NodeLKR)
+progress (ReturnT (PushKT (NodeRKT packed~) kt) packed~) = inj₂ (_ , NodeRKR {!!} {!!})
 
 -- Preservation
 -- If we are well-typed and make a step then the next state is also
@@ -654,11 +646,11 @@ preservation (VarSR y) (EnterT (te , ve≈te , VarT inT) kt) =
   ReturnT kt (ρ⇒vτ ve≈te y inT)
 preservation LetRegionSR (EnterT (te , ve≈te , LetRegionT (notherer {r = r}) tyj) kt) =
   EnterT (((r , RegionTy) , te) , x≈ refl region~ ve≈te , tyj) kt
-preservation (LetLocStartSR x) (EnterT (te , ve≈te , LetLocStartT _ (notherel {l = l}) tyj) kt) =
+preservation (LetLocStartSR _) (EnterT (te , ve≈te , LetLocStartT _ (notherel {l = l}) tyj) kt) =
   EnterT (((l , CursorTy) , te) , x≈ refl cursor~ ve≈te , tyj) kt
-preservation (LetLocAfterCSR x) (EnterT (te , ve≈te , LetLocAfterCT _ (notherel {l = l}) tyj) kt) =
+preservation (LetLocAfterCSR _) (EnterT (te , ve≈te , LetLocAfterCT _ (notherel {l = l}) tyj) kt) =
   EnterT (((l , CursorTy) , te) , (x≈ refl cursor~ ve≈te) , tyj) kt
-preservation (LetLocAfterVSR x x₁) (EnterT (te , ve≈te , LetLocAfterVT _ _ (notherel {l = l}) tyj) kt) =
+preservation (LetLocAfterVSR _ _) (EnterT (te , ve≈te , LetLocAfterVT _ _ (notherel {l = l}) tyj) kt) =
   EnterT (((l , CursorTy) , te) , x≈ refl cursor~ ve≈te , tyj ) kt
 preservation LetSR (EnterT (te , ve≈te , LetPackedT tyj tyj2) kt) =
   EnterT (te , ve≈te , tyj) (PushKT (LetKT λ v∼t → (_ , te) , (x≈ refl v∼t ve≈te) , tyj2) kt)
@@ -670,8 +662,8 @@ preservation NodeSR (EnterT (te , ve≈te , NodeT tyj1 tyj2 _ _) kt) =
   EnterT (te , ve≈te , tyj1) (PushKT (NodeLKT (te , ve≈te , tyj2)) kt)
 preservation NodeLKR (ReturnT (PushKT (NodeLKT (te , ve≈te , tyj)) kt) vt) =
   EnterT (te , ve≈te , tyj) (PushKT (NodeRKT vt) kt)
-preservation (NodeRKR a b) (ReturnT (PushKT (NodeRKT c) d) packed~) =
-  ReturnT d packed~
+preservation (NodeRKR _ _) (ReturnT (PushKT (NodeRKT _) kt) packed~) =
+  ReturnT kt packed~
 
 
 -- Main theorem
@@ -697,6 +689,7 @@ type-safety-step* st with type-safety-step st
   let (sf , steps , f) = type-safety-step* s't
   in sf , step • steps , f
 
+-- Type safety (version 2)
 type-safety2 : ∀ {e τ L1 L2 C R} -> (L1 , C , R , etenv ⊢ e :: τ , L2) -> Σ[ v ∈ Val ] (SEval e v) × (v ∼ τ)
 type-safety2 et with type-safety-step* (loadT et)
 ... | (Return [] v) , steps , F vτ = v , steps , vτ
