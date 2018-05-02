@@ -461,9 +461,9 @@ data _≈_ where
 
 v∼t⇒v : (v : Val) -> (t : Ty) -> v ∼ t -> Val
 v∼t⇒v (LitV n) IntTy num~ = LitV n
-v∼t⇒v .(CurV _ _) .CursorTy cursor~ = {!!}
-v∼t⇒v .(StV _) .(PackedAt _ _ _) packed~ = {!!}
-v∼t⇒v .(StV _) .RegionTy region~ = {!!}
+v∼t⇒v (CurV st o) .CursorTy cursor~ = (CurV st o)
+v∼t⇒v (StV st) .(PackedAt _ _ _) packed~ = (StV st)
+v∼t⇒v (StV st) .RegionTy region~ = (StV st)
 
 --------------------------------------------------------------------------------
 
@@ -581,8 +581,8 @@ extend (ve , e) x v = (((x , v) , ve) , e)
 -- Frame typing fr ⊢f (τ , τ)
 data _⊢f_ : Frame -> (Ty × Ty) -> Set where
   LetKT : ∀ {x cl t1 t2 L R C L2} ->
-    (∀ {v1} -> (v1 ∼ t1) -> L , R , C , (extend cl x v1) ⊢c t2 , L2) ->
-    LetK x cl ⊢f (t1 , t2)
+            (∀ {v1} -> (v1 ∼ t1) -> L , R , C , (extend cl x v1) ⊢c t2 , L2) ->
+            LetK x cl ⊢f (t1 , t2)
 
   LeafKT : ∀ {l r ve} ->
              LeafK l r ve ⊢f (IntTy , PackedAt "Tree" l r)
@@ -594,6 +594,7 @@ data _⊢f_ : Frame -> (Ty × Ty) -> Set where
   -- NodeRKT : ∀ {l r y ve t1 t2 sty L1 L2 R C cl ty} ->
   --             L1 , R , C , cl ⊢c ty , L2 ->
   --             NodeRK l r sty ⊢f (t1 , t2)
+
 
 -- Continuation typing κ ⊢κ (τ , τ)
 data _⊢k_ : Cont -> (Ty × Ty) -> Set where
@@ -640,6 +641,7 @@ progress (EnterT (te , ve≈te , NodeT tyjx tyjy c1 c2) kt) = inj₂ (_ , NodeSR
 progress (ReturnT EmptyKT v∼t) = inj₁ (F v∼t)
 progress (ReturnT (PushKT (LetKT x₁) x₂) kt) = inj₂ (_ , LetKR)
 progress (ReturnT (PushKT LeafKT x) num~) = inj₂ (_ , LeafKR {!!} {!!})
+
 {-
 progress (ReturnT (PushKT (NodeLKT y) x) x₁) = inj₂ (_ , NodeLKR)
 progress (ReturnT (PushKT (NodeRKT y) x) x₁) = {!!}
@@ -669,6 +671,7 @@ preservation LeafSR (EnterT (te , ve≈te , LeafT x tyj) kt) =
 preservation (LeafKR _ _) (ReturnT (PushKT LeafKT kt) v∼t) = ReturnT kt packed~
 {-# CATCHALL #-}
 preservation _ _ = {!!}
+
 {-
 preservation NodeSR (EnterT (proj₃ , proj₄ , NodeT proj₅ proj₆ x₂ x₃) x₄) = {!!}
 preservation NodeLKR (ReturnT (PushKT x x₁) x₂) = {!!}
