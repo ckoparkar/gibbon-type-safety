@@ -344,7 +344,7 @@ data Eval : Closure -> Val -> Set where
             Eval (ve , e1) (StV stx) ->
             Eval (ve , e2) (StV sty) ->
             Eval (ve , NodeE l r e1 e2)
-                 (StV (st ++ L.[ (o , N) ] ++ stx ++ sty))
+                 (StV (st ++ [ (o , N) ] ++ stx ++ sty))
 
 
 rtest5 : Eval (evenv , LitE 42) (LitV 42)
@@ -484,6 +484,8 @@ type-safety ve≈te (NodeT tyj tyj₁ x₁ x₂) (NodeR x₃ x₄ ev ev₁) = pa
 data Frame : Set where
   LetK  : Var -> Closure -> Frame
   LeafK : LocVar -> Region -> VEnv -> Frame
+  NodeLK : LocVar -> Region -> Exp -> VEnv -> Frame
+  NodeRK : LocVar -> Region -> Val -> Frame
 
 Cont : Set
 Cont = List Frame
@@ -525,8 +527,19 @@ data _↦_ : State -> State -> Set where
              (l , CurV st o) ∈V ve ->
              Return ((LeafK l r ve) ∷ k) (LitV n) ↦ Return k (StV (st ++ (o , L) ∷ [ (suc o , I n) ]))
 
+  NodeSR : ∀ {l r x y ve k} ->
+             Enter (ve , NodeE l r x y) k ↦ Enter (ve , x) (NodeLK l r y ve ∷ k)
 
------------------------------------------------------------------------------------------
+  NodeLKR : ∀ {l r y ve k stx} ->
+              Return (NodeLK l r y ve ∷ k) stx ↦ Enter (ve , y) (NodeRK l r stx ∷ k)
+
+  NodeRKR : ∀ {l r stx sty st o ve k} ->
+              (r , StV st) ∈V ve ->
+              (l , CurV st o) ∈V ve ->
+              Return (NodeRK l r (StV stx) ∷ k) (StV sty) ↦ Return k (StV (st ++ L.[ (o , N) ] ++ stx ++ sty))
+
+
+--------------------------------------------------------------------------------
 
 infixr 10 _•_
 
@@ -597,7 +610,7 @@ progress (EnterT (te , ve≈te , LetLocAfterVT _ y x) kt) =
 progress (EnterT (te , ve≈te , LetLocAfterCT y x) kt) = inj₂ (_ , (LetLocAfterCSR (proj₂ (proj₂ (Γ⇒l ve≈te y)))))
 progress (EnterT (te , ve≈te , LetPackedT x x₁) kt) = inj₂ (_ , LetSR)
 progress (EnterT (te , ve≈te , LeafT x x₁) kt) = inj₂ (_ , LeafSR)
-progress (EnterT (te , ve≈te , NodeT x x₁ x₃ x₄) kt) = {!!}
+progress (EnterT (te , ve≈te , NodeT tyjx tyjy c1 c2) kt) = inj₂ (_ , NodeSR)
 progress (ReturnT EmptyKT v∼t) = inj₁ (F v∼t)
 progress (ReturnT (PushKT (LetKT x₁) x₂) kt) = inj₂ (_ , LetKR)
 
