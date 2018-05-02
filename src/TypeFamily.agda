@@ -557,16 +557,16 @@ srtest4 = LetRegionSR • LetLocStartSR herev • LetSR • LeafSR • LitSR •
 --------------------------------------------------------------------------------
 
 -- Closure typing cl ⊢c τ
-_,_,_,_⊢c_ : LEnv -> REnv -> CEnv -> Closure -> Ty -> Set
-le , re , ce , (ve , e) ⊢c t = Σ[ te ∈ TEnv ] (ve ≈ te × (le , re , ce , te ⊢ e :: t , le))
+_,_,_,_⊢c_,_ : LEnv -> REnv -> CEnv -> Closure -> Ty -> LEnv -> Set
+le , re , ce , (ve , e) ⊢c t , le2 = Σ[ te ∈ TEnv ] (ve ≈ te × (le , re , ce , te ⊢ e :: t , le2))
 
 extend : Closure -> String -> Val -> Closure
 extend (ve , e) x v = (((x , v) , ve) , e)
 
 -- Frame typing fr ⊢f (τ , τ)
 data _⊢f_ : Frame -> (Ty × Ty) -> Set where
-  LetKT : ∀ {x cl t1 t2 L R C} ->
-    (∀ {v1} -> (v1 ∼ t1) -> L , R , C , (extend cl x v1) ⊢c t2) ->
+  LetKT : ∀ {x cl t1 t2 L R C L2} ->
+    (∀ {v1} -> (v1 ∼ t1) -> L , R , C , (extend cl x v1) ⊢c t2 , L2) ->
     LetK x cl ⊢f (t1 , t2)
 
 -- Continuation typing κ ⊢κ (τ , τ)
@@ -580,8 +580,8 @@ data _⊢k_ : Cont -> (Ty × Ty) -> Set where
 
 -- State typing
 data _⊢s_ : State -> Ty -> Set where
-  EnterT  : ∀ {cl κ τ₁ τ₂ L R C} ->
-    L , R , C , cl ⊢c τ₁ ->
+  EnterT  : ∀ {cl κ τ₁ τ₂ L R C L2} ->
+    L , R , C , cl ⊢c τ₁ , L2 ->
     κ ⊢k (τ₁ , τ₂) ->
     (Enter cl κ) ⊢s τ₂
   ReturnT : ∀ {κ v τ₁ τ₂} ->
@@ -589,7 +589,7 @@ data _⊢s_ : State -> Ty -> Set where
     v ∼ τ₁ ->
     Return κ v ⊢s τ₂
 
-loadT : ∀ {L1 R C e t} -> (L1 , R , C , etenv ⊢ e :: t , L1) -> (Enter (evenv , e) []) ⊢s t
+loadT : ∀ {L1 L2 R C e t} -> (L1 , R , C , etenv ⊢ e :: t , L2) -> (Enter (evenv , e) []) ⊢s t
 loadT et = EnterT (etenv , e≈ , et) EmptyKT
 
 data Final : State -> Ty -> Set where
@@ -619,12 +619,51 @@ progress (ReturnT (PushKT (LetKT x₁) x₂) kt) = inj₂ (_ , LetKR)
 -- If we are well-typed and make a step then the next state is also
 -- well-typed
 
--- preservation : ∀ {s s' τ} → s ↦ s' → s ⊢s τ → s' ⊢s τ
--- preservation LitSR (EnterT x x₁) = {!!}
--- preservation (VarSR x₁) (EnterT x₂ x₃) = {!!}
--- preservation LetRegionSR (EnterT x x₁) = {!!}
--- preservation (LetLocStartSR x) (EnterT x₁ x₂) = {!!}
--- preservation LetSR (EnterT x₁ x₂) = {!!}
--- preservation LetKR (ReturnT x₁ x₂) = {!!}
--- preservation LeafSR (EnterT x x₁) = {!!}
--- preservation (LeafKR x x₁) (ReturnT x₂ x₃) = {!!}
+preservation : ∀ {s s' τ} -> s ↦ s' -> s ⊢s τ -> s' ⊢s τ
+preservation LitSR (EnterT (te , ve≈te , LitT) kt) = ReturnT kt num~
+preservation (VarSR y) (EnterT (te , ve≈te , VarT inT) kt) =
+  ReturnT kt (ρ⇒vτ ve≈te y inT)
+preservation LetRegionSR (EnterT (te , ve≈te , LetRegionT x tyj) kt) =
+  EnterT ((({!!} , RegionTy) , te) , x≈ refl region~ ve≈te , tyj) kt
+preservation (LetLocStartSR x) (EnterT (te , ve≈te , LetLocStartT x₁ tyj) kt) =
+  EnterT ((({!!} , CursorTy) , te) , x≈ refl cursor~ ve≈te , tyj) kt
+preservation (LetLocAfterCSR x) (EnterT (te , ve≈te , LetLocAfterCT x₁ tyj) kt) =
+  EnterT ((({!!} , CursorTy) , te) , (x≈ refl cursor~ ve≈te) , tyj) kt
+preservation (LetLocAfterVSR x x₁) (EnterT (te , ve≈te , LetLocAfterVT x₂ x₃ tyj) kt) =
+  EnterT ((({!!} , CursorTy) , te) , x≈ refl cursor~ ve≈te , tyj ) kt
+preservation LetSR (EnterT (te , ve≈te , LetPackedT tyj tyj2) kt) =
+  EnterT (te , ve≈te , tyj) (PushKT (LetKT λ v∼t → (_ , te) , (x≈ refl v∼t ve≈te) , tyj2) kt)
+preservation LeafSR (EnterT (te , ve≈te , LeafT x tyj) kt) = {!!}
+preservation NodeSR (EnterT (te , ve≈te , NodeT tyj tyj₁ x₁ x₂) kt) = {!!}
+preservation LetKR (ReturnT (PushKT (LetKT pct) kt) v∼t) =
+  EnterT (pct v∼t) kt
+preservation (LeafKR x x₁) (ReturnT kt v∼t) = {!!}
+preservation NodeLKR (ReturnT kt v∼t) = {!!}
+preservation (NodeRKR x x₁) (ReturnT kt v∼t) = {!!}
+
+-- Main theorem
+
+-- If we are well-typed, then either
+--   - we are final
+--   - we can make a step and the next state has the same type
+--   - we diverge (at least as far as Agda is concerned)
+
+type-safety-step : ∀ {s τ} → s ⊢s τ →
+  Final s τ ⊎ Σ[ s' ∈ State ] (s ↦ s' × s' ⊢s τ)
+type-safety-step st with progress st
+type-safety-step st | inj₁ f = inj₁ f
+type-safety-step st | inj₂ (s' , step) =
+  inj₂ (s' , step , preservation step st)
+
+{-# TERMINATING #-}
+type-safety-step* : ∀ {s τ} → s ⊢s τ →
+                    Σ[ s' ∈ State ] (s ↦* s' × Final s' τ)
+type-safety-step* st with type-safety-step st
+... | inj₁ f = _ , ∎ , f
+... | inj₂ (s' , step , s't) =
+  let (sf , steps , f) = type-safety-step* s't
+  in sf , step • steps , f
+
+type-safety2 : ∀ {e τ L1 L2 C R} -> (L1 , C , R , etenv ⊢ e :: τ , L2) -> Σ[ v ∈ Val ] (SEval e v) × (v ∼ τ)
+type-safety2 et with type-safety-step* (loadT et)
+... | (Return [] v) , steps , F vτ = v , steps , vτ
