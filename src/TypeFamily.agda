@@ -111,12 +111,12 @@ data _∈C_ : LocationConstraint -> CEnv -> Set where
              (AfterConstantC n l0 l1) ∈C C ->
              (AfterConstantC n l0 l1) ∈C ((AfterConstantC n' l0' l1') , C)
 
-  hereav : ∀ {s l0 l1 C} -> (AfterVariableC s l0 l1) ∈C C
-  skipav : ∀ {s1 s2 l0 l1 l0' l1' C} ->
+  hereav : ∀ {l0 l1 C} -> (AfterVariableC l0 l1) ∈C C
+  skipav : ∀ {l0 l1 l0' l1' C} ->
              {α : False (l0 Str.≟ l0')} ->
              {β : False (l1 Str.≟ l1')} ->
-             (AfterVariableC s1 l0 l1) ∈C C ->
-             (AfterVariableC s1 l0 l1) ∈C ((AfterVariableC s2 l0' l1') , C)
+             (AfterVariableC l0 l1) ∈C C ->
+             (AfterVariableC l0 l1) ∈C ((AfterVariableC l0' l1') , C)
 
 --------------------------------------------------------------------------------
 
@@ -161,7 +161,7 @@ data _,_,_,_⊢_::_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) -> 
                      l1 ∉L L1 ->
                      ((l1 , (false , (true , false))) , L1)
                      , R ,
-                     ((AfterVariableC x l2 l1) , C) , ((l1 , CursorTy) , T) ⊢ bod :: t , L3 ->
+                     ((AfterVariableC l2 l1) , C) , ((l1 , CursorTy) , T) ⊢ bod :: t , L3 ->
                      -- l1 ∈W L3 ->
                      ----------------------------------------------------------------
                      L1 , R , C , T  ⊢ LetLocE l1 (AfterVariableLE x l2) bod :: t , L3
@@ -196,7 +196,7 @@ data _,_,_,_⊢_::_,_ : (L : LEnv) -> (R : REnv) -> (C : CEnv) -> (T : TEnv) -> 
               L1 , R , C , T ⊢ x :: PackedAt "Tree" l1 r , L2 ->
               L2 , R , C , T ⊢ y :: PackedAt "Tree" l2 r , L3 ->
               (AfterConstantC 1 l0 l1) ∈C C ->
-              (AfterVariableC {!!} l1 l2) ∈C C ->
+              (AfterVariableC l1 l2) ∈C C ->
               ----------------------------------------------------------------
               L1 , R , C , T  ⊢ NodeE l0 r x y :: (PackedAt "Tree" l0 r) , L3
 

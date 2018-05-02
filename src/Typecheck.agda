@@ -17,7 +17,7 @@ open import Syntax
 data LocationConstraint : Set where
   StartOfC : LocVar -> Region -> LocationConstraint
   AfterConstantC : ℕ -> LocVar -> LocVar -> LocationConstraint
-  AfterVariableC : Var -> LocVar -> LocVar -> LocationConstraint
+  AfterVariableC : LocVar -> LocVar -> LocationConstraint
   InRegionC : LocVar -> Region -> LocationConstraint
 
 ConstraintSet : Set
@@ -110,7 +110,7 @@ ensureAfterConstant n l1 l2 (AfterConstantC n' l1' l2' ∷ cs) =
   if (n N.== n') ∧ (l1 == l1') ∧ (l2 == l2')
   then true
   else ensureAfterConstant n l1 l2 cs
-ensureAfterConstant n l1 l2 (AfterVariableC _ _ _ ∷ cs) = ensureAfterConstant n l1 l2 cs
+ensureAfterConstant n l1 l2 (AfterVariableC _ _ ∷ cs) = ensureAfterConstant n l1 l2 cs
 ensureAfterConstant n l1 l2 (InRegionC _ _ ∷ cs) = ensureAfterConstant n l1 l2 cs
 
 -- | Check that l2 is after l1
@@ -118,7 +118,7 @@ ensureAfterPacked : LocVar -> LocVar -> ConstraintSet -> Bool
 ensureAfterPacked l1 l2 [] = false
 ensureAfterPacked l1 l2 (StartOfC _ _ ∷ cs) = ensureAfterPacked l1 l2 cs
 ensureAfterPacked l1 l2 (AfterConstantC _ _ _ ∷ cs) = ensureAfterPacked l1 l2 cs
-ensureAfterPacked l1 l2 (AfterVariableC _ l1' l2' ∷ cs) =
+ensureAfterPacked l1 l2 (AfterVariableC l1' l2' ∷ cs) =
   if (l1 == l1') ∧ (l2 == l2')
   then true
   else ensureAfterPacked l1 l2 cs
@@ -270,7 +270,7 @@ tcExp ddfs fndefs env2 constrs regset tstatein (LetLocE loc (AfterConstantLE n l
   ty , tstate3
 tcExp ddfs fndefs env2 constrs regset tstatein (LetLocE loc (AfterVariableLE v loc2) e) =
   let r = getRegion loc2 constrs in
-  let constrs' = extendConstrs (AfterVariableC v loc2 loc) (extendConstrs (InRegionC loc r) constrs) in
+  let constrs' = extendConstrs (AfterVariableC loc2 loc) (extendConstrs (InRegionC loc r) constrs) in
   let (_ , tstate1) = tcExp ddfs fndefs env2 constrs regset tstatein (VarE v) in
   let tstate' = extendTS loc (Output , true) (setAliased loc2 tstate1) in
   let (ty , tstate'') = tcExp ddfs fndefs env2 constrs' regset tstate' e in
@@ -332,7 +332,7 @@ tcCases ddfs fndefs env2 constrs regset tstatein lin reg ((dc , (vs , bod)) ∷ 
     genConstrs (((_v1 , l1) , PackedTy _ _) , nothing) (lin , lst) =
       (l1 , [ AfterConstantC 1 lin l1 ] L.++ [ InRegionC l1 reg ] L.++ lst)
     genConstrs (((_v1 , l1) , PackedTy _ _) , just ((v2 , l2) , PackedTy _ _)) (_lin , lst) =
-      (l1 , [ AfterVariableC v2 l2 l1 ] L.++ [ InRegionC l1 reg ] L.++ lst)
+      (l1 , [ AfterVariableC l2 l1 ] L.++ [ InRegionC l1 reg ] L.++ lst)
     genConstrs (((_v1 , l1) , PackedTy _ _) , just ((_v2 , _l2) , IntTy)) (lin , lst) =
       -- Hard coding the size is fine for now
       (l1 , [ AfterConstantC 8 lin l1 ] L.++ [ InRegionC l1 reg ] L.++ lst)
