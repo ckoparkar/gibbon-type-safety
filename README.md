@@ -1,12 +1,12 @@
 # gibbon-type-safety
 
-- [Syntax.agda](Syntax.agda) specifies the grammar and other details about the source langugage.
+- [Syntax.agda](src/Syntax.agda) specifies the grammar and other details about the source langugage.
 
-- [Typecheck.agda](Typecheck.agda) implements the Gibbon typechecker. There is a `tcProg` function which acts as
+- [Typecheck.agda](src/Typecheck.agda) implements the Gibbon typechecker. There is a `tcProg` function which acts as
   the identity function when the program typechecks. Otherwise, it reports the error using a special `ErrorTy`.
-  `tcExp` is where most of the action is.
+  [`tcExp`](src/Typecheck.agda#L129) is where most of the action is.
 
-- [TypeFamily.agda](TypeFamily.agda) has the type family (i.e Agda data types) version of the typechecker.
+- [TypeFamily.agda](src/TypeFamily.agda) has the type family (i.e Agda data types) version of the typechecker.
   We specify that something typechecks as a proposition and only valid propositions are inhabited.
   However, it cannot typecheck the complete source language at the moment.
   Namely, it lacks support for typechecking function applications (`AppE`) and pattern matches (`CaseE`).
@@ -42,9 +42,11 @@ But this typesystem doesn't implement those.
 ## Reduction relation
 
 The reduction relation is relatively straighforward.
-Regions are represented by "stores", which are represented as Agda lists.
-And there can only be "tag" or "int" values in a store.
-The locations are called "cursors" and are just offsets into some store.
+Regions are represented as [`stores`](src/TypeFamily.agda#L129)
+which are just lists in Agda.
+Each store value can either be a tag (like L or N etc.) or an integer.
+And data constructors write values to these stores.
+The locations are referred to as "cursors" and are just offsets into a store.
 For example, `(Node (Leaf 1) (Leaf 2))` is represented as:
 
 
