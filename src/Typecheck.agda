@@ -277,9 +277,6 @@ tcExp ddfs fndefs env2 constrs regset tstatein (LetLocE loc (AfterVariableLE v l
   let tstate3 = removeTS loc tstate'' in
   ty , tstate3
 
-tcExp ddfs fndefs env2 constrs regset tstatein (RetE locs e) =
-  tcExp ddfs fndefs env2 constrs regset tstatein e
-
 -- Hacks:
 tcExp ddfs fndefs env2 constrs regset tstatein (LeafE loc r n) =
   let (ty , tstate) = tcExp ddfs fndefs env2 constrs regset tstatein n in

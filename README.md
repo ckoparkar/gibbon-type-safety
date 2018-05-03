@@ -51,3 +51,10 @@ For example, `(Node (Leaf 1) (Leaf 2))` is represented as:
 
 
 ```StV ((0 , N) ∷  (1 , L) ∷ (2 , I 1) ∷ (3 , L) ∷ (4 , I 2) ∷ [])```
+
+
+## Holes
+
+There are 2 holes on lines [635](src/TypeFamily.agda#L635) & [637](src/TypeFamily.agda#L637),
+corresponding to the `∈V` proof obligations on lines
+[533](src/TypeFamily.agda#L533) & [544](src/TypeFamily.agda#L544).
